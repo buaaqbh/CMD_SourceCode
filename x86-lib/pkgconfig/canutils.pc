@@ -1,0 +1,9 @@
+prefix=/media/android_ext4/imx6/can/install
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: canutils
+Description: ifconfig like tool for can devices
+Version: 4.0.6
+Cflags: -I${includedir}
