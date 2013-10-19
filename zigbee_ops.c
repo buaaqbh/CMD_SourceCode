@@ -14,10 +14,13 @@
 #include "zigbee_ops.h"
 #include "uart_ops.h"
 
-#define  ZIGBEE_UART_NAME 	"/dev/ttyS0"
-#define  ZIGBEE_UART_SPEED 	38400
+#define  ZIGBEE_UART_NAME 	"/dev/ttymxc1"
+//#define  ZIGBEE_UART_NAME 	"/dev/ttyS0"
+#define  ZIGBEE_UART_SPEED 	9600
 
-#define _DEBUG
+static int zigbee_bitrate[] = {9600, 19200, 38400, 57600, 115200};
+
+//#define _DEBUG
 #ifdef _DEBUG
 static void debug_out(byte *buf, int len)
 {
@@ -38,7 +41,7 @@ static unsigned char sum_check(unsigned char *buf, int len)
 	return (sum & 0xff);
 }
 
-int Zigbee_Get_Device(void)
+int Zigbee_Get_Device(int speed)
 {
 	int fd;
 
@@ -48,7 +51,7 @@ int Zigbee_Get_Device(void)
 		return -1;
 	}
 
-	uart_set_speed(fd, ZIGBEE_UART_SPEED);
+	uart_set_speed(fd, speed);
 	if(uart_set_parity(fd, 8, 1, 'N') == -1) {
 		printf ("Set Parity Errorn");
 		return -1;
@@ -220,7 +223,7 @@ int Zigbee_Set_Bitrate(int fd, int speed)
 
 #ifdef _DEBUG
 	printf("Zigbee Cmd Return: ");
-	debug_out(rbuf, 2);
+	debug_out(rbuf, 6);
 #endif
 
 	err = rbuf[0]*100000 + rbuf[1]*10000 + rbuf[2]*1000 + rbuf[3]*100;
@@ -253,7 +256,7 @@ int Zigbee_Read_MAC(int fd, byte *mac)
 
 #ifdef _DEBUG
 	printf("Zigbee Cmd Return: ");
-	debug_out(mac, 2);
+	debug_out(mac, 8);
 #endif
 
 	return 0;
@@ -295,7 +298,7 @@ int Zigbee_Set_type(int fd, int type)
 
 #ifdef _DEBUG
 	printf("Zigbee Cmd Return: ");
-	debug_out(rbuf, 2);
+	debug_out(rbuf, 8);
 #endif
 
 	if (memcmp(rbuf, res, 8) != 0)
@@ -327,12 +330,12 @@ int Zigbee_Get_type(int fd)
 
 #ifdef _DEBUG
 	printf("Zigbee Cmd Return: ");
-	debug_out(rbuf, 2);
+	debug_out(rbuf, 6);
 #endif
 
-	if (memcmp(rbuf, res0, 6) != 0)
+	if (memcmp(rbuf, res0, 6) == 0)
 		return 0;
-	else if (memcmp(rbuf, res1, 6) != 0)
+	else if (memcmp(rbuf, res1, 6) == 0)
 		return 1;
 	else
 		return -1;
@@ -365,7 +368,7 @@ int Zigbee_Set_Channel(int fd, int channel)
 
 #ifdef _DEBUG
 	printf("Zigbee Cmd Return: ");
-	debug_out(rbuf, 2);
+	debug_out(rbuf, 5);
 #endif
 
 	memcpy(&data, rbuf, 4);
@@ -396,7 +399,7 @@ int Zigbee_Get_channel(int fd)
 
 #ifdef _DEBUG
 	printf("Zigbee Cmd Return: ");
-	debug_out(rbuf, 2);
+	debug_out(rbuf, 6);
 #endif
 
 	return rbuf[5];
@@ -429,7 +432,7 @@ int Zigbee_Set_TransType(int fd, int type)
 
 #ifdef _DEBUG
 	printf("Zigbee Cmd Return: ");
-	debug_out(rbuf, 2);
+	debug_out(rbuf, 6);
 #endif
 
 	res[5] = type;
@@ -519,17 +522,77 @@ usint Zigbee_Read_RouterAddr(int fd)
 	return res;
 }
 
+usint Zigbee_Test_SerialPort(int fd)
+{
+	byte cmd[8] = {0xfc, 0x00, 0x91, 0x07, 0x97, 0xa7};
+	byte res[6] = {0x01, 0x02, 0x03, 0x04, 0x05, 0xff};
+	byte rbuf[8] = {0};
+	int err = 0;
+
+	if (zigbee_send_cmd(fd, cmd) < 0)
+		return -1;
+
+	memset(rbuf, 0, 8);
+	if ((err = io_readn(fd, rbuf, 8, 5)) != 8) {
+		if (err < 0) {
+			perror("read uart");
+		}
+		else {
+			printf("nread %d bytes\n", err);
+		}
+		return -1;
+	}
+
+#ifdef _DEBUG
+	printf("Zigbee Cmd Return: ");
+	debug_out(rbuf, 8);
+#endif
+
+	if (memcmp(res, rbuf, 6) == 0)
+		return 0;
+	else
+		return -1;
+}
+
+int Zigbee_Get_BitRate(int fd)
+{
+	int i;
+	int num = sizeof(zigbee_bitrate) / sizeof(int);
+
+	for (i = 0; i < num; i++) {
+		uart_set_speed(fd, zigbee_bitrate[i]);
+		if (Zigbee_Test_SerialPort(fd) == 0)
+			break;
+	}
+
+	if (i == num)
+		return -1;
+	else
+		return zigbee_bitrate[i];
+}
+
 int Zigbee_Device_Init(void)
 {
-	byte pan_id[2] = {0x5a, 0xa5};
-	int channel = 0x0b;
+	byte pan_id[2] = {0x19, 0x9b};
+	int channel = 0x16;
 	int type = 0; /* Coordinator */
-
+	int bitrate;
+	int i = 0;
 	byte rbuf[8] = {0};
 	int fd;
 
-	if ((fd = Zigbee_Get_Device()) < 0)
+	if ((fd = Zigbee_Get_Device(ZIGBEE_UART_SPEED)) < 0)
 		return -1;
+
+	bitrate = Zigbee_Get_BitRate(fd);
+	printf("Zigbee Get Bitrate: %d .\n", bitrate);
+
+	if (bitrate != 9600) {
+		Zigbee_Set_Bitrate(fd, 9600);
+		if(Zigbee_Reset(fd) < 0)
+			return -1;
+		uart_set_speed(fd, 9600);
+	}
 
 	if (Zigbee_Get_type(fd) != 0) {
 		/* Set Zigbee to Coordinator Mode */

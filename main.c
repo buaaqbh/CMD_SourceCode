@@ -17,6 +17,8 @@
 #include "types.h"
 
 char *config_file = NULL;
+pthread_spinlock_t spinlock;
+volatile int System_Sleep_Enable = 0;
 
 static void usage(FILE * fp, int argc, char **argv)
 {
@@ -36,6 +38,18 @@ static const struct option long_options[] = {
 	{0, 0, 0, 0}
 };
 
+void system_sleep_enable(int enable)
+{
+	pthread_spin_lock(&spinlock);
+	if (enable) {
+		System_Sleep_Enable = 1;
+	}
+	else {
+		System_Sleep_Enable = 0;
+	}
+	pthread_spin_unlock(&spinlock);
+}
+
 void *tcpServerThrFxn(void * arg)
 {
 	ServerEnv * envp = (ServerEnv *)arg;
@@ -54,10 +68,14 @@ void *tcpServerThrFxn(void * arg)
 		else if (ret < 0)
 			continue;
 
+		system_sleep_enable(0);
+
 		if (CMA_Server_Process(socketfd, rbuf) < 0) {
 			printf("CMD Server Process error.\n");
 			continue;
 		}
+
+		system_sleep_enable(1);
 	}
 
 	close_socket(socketfd);
@@ -75,14 +93,33 @@ void udpServerThrFxn(void)
 		if (ret < 0)
 			continue;
 
+		system_sleep_enable(0);
+
 		if (CMA_Server_Process(-1, rbuf) < 0) {
 			printf("CMD: Server Process error.\n");
 			continue;
 		}
+
+		system_sleep_enable(1);
 	}
 
 	return;
 }
+
+#ifdef CMD_SENSOR_AUTO_DETECT
+void *Sensor_Auto_Detect(void * arg)
+{
+	int cycle = 1 * 60;
+	while (1) {
+		Sensor_Scanning();
+		if (rtc_timer(cycle) < 0) {
+			printf("CMD: Rtc time error.\n");
+			sleep(cycle);
+		}
+	}
+	return 0;
+}
+#endif
 
 void *main_sample_loop(void * arg)
 {
@@ -92,13 +129,16 @@ void *main_sample_loop(void * arg)
 		/*
 		 *  Get Data from Sensor
 		 */
+		system_sleep_enable(0);
+		CMA_Send_SensorData(-1, CMA_MSG_TYPE_DATA_QXENV);
+		system_sleep_enable(1);
 
 		alarm(2);
 		printf("RTC timer: %d sec\n", cycle);
 		if (rtc_timer(cycle) < 0) {
 			printf("CMD: Rtc time error.\n");
 			alarm(0);
-			usleep(500000);
+			sleep(cycle);
 			continue;
 		}
 	}
@@ -110,7 +150,11 @@ void enter_sleep(int sig)
 {
 //	char *cmd_shell = "echo mem >/sys/power/state";
 	printf("Enter func: %s\n", __func__);
+
+	if (System_Sleep_Enable) {
+		printf("CMD: System Enter Sleep.\n");
 //	system(cmd_shell);
+	}
 
 	return;
 }
@@ -123,8 +167,9 @@ int main(int argc, char *argv[])
 	int s_socket;
 	pthread_t pthread;
 	int ret;
-//	int fd;
-//	usint pan_id = 0;
+#ifdef CMD_SENSOR_AUTO_DETECT
+	pthread_t p_sensor;
+#endif
 
 	config_file = CMA_CONFIG_FILE;
 
@@ -181,23 +226,25 @@ int main(int argc, char *argv[])
 //		return -1;
 	}
 
+	pthread_spin_init(&spinlock, 0);
+
+#ifdef CMD_SENSOR_AUTO_DETECT
 	INIT_LIST_HEAD(&s_head);
-	Sensor_Scanning();
+
+	ret = pthread_create(&p_sensor, NULL, Sensor_Auto_Detect, NULL);
+	if (ret != 0)
+		printf("CMD: can't create thread.");
+#endif
 
 	if (signal(SIGALRM, enter_sleep) == SIG_ERR) {
 		printf("CMD: sinal init error.\n");
 		return -1;
 	}
 
-	alarm(2);
 
-	/*
-	if ((fd = Zigbee_Get_Device()) < 0)
-		return -1;
-
-	pan_id = 0x1234;
-	Zigbee_Set_PanID(fd, (byte *)&pan_id);
-	*/
+	if (Zigbee_Device_Init() < 0) {
+		printf("Zigbee Device Init Error.\n");
+	}
 
 	pid = fork();
 	if(pid == -1) {
@@ -222,9 +269,17 @@ int main(int argc, char *argv[])
 	if (ret != 0)
 		printf("CMD: can't create thread.");
 
+#ifdef CMD_SENSOR_AUTO_DETECT
+	ret = pthread_join(p_sensor, NULL);
+	if (ret != 0)
+		printf("CMD: can't join with thread.");
+#endif
+
 	ret = pthread_join(pthread, NULL);
 	if (ret != 0)
 		printf("CMD: can't join with thread.");
+
+	pthread_spin_destroy(&spinlock);
 
 	return 0;
 }

@@ -25,8 +25,9 @@ void uart_close_dev(int fd)
 	close(fd);
 }
 
-int speed_arr[] = { B115200, B57600, B38400, B19200, B9600, B4800, B2400, B1200, B300 };
-int name_arr[] = { 115200, 57600, 38400,  19200,  9600,  4800,  2400,  1200,  300 };
+int speed_arr[] = { B115200, B38400, B19200, B9600, B4800, B2400, B1200, B300, B115200, B38400, B19200, B9600, B4800, B2400, B1200, B300 };
+int name_arr[] = { 115200, 38400, 19200, 9600, 4800, 2400, 1200, 300, 115200, 38400, 19200, 9600, 4800, 2400, 1200, 300 };
+
 void uart_set_speed(int fd, int speed)
 {
 	int   i; 
@@ -40,8 +41,8 @@ void uart_set_speed(int fd, int speed)
 	for ( i= 0;  i < sizeof(speed_arr) / sizeof(int);  i++) { 
 		if (speed == name_arr[i]) {     
 			tcflush(fd, TCIOFLUSH);     
-			cfsetispeed(&Opt, B38400);
-			cfsetospeed(&Opt, B38400);
+			cfsetispeed(&Opt, speed_arr[i]);
+			cfsetospeed(&Opt, speed_arr[i]);
 			Opt.c_cflag |= (CLOCAL | CREAD);
 			status = tcsetattr(fd, TCSANOW, &Opt);  
 			if  (status != 0) {        

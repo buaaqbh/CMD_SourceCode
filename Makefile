@@ -10,7 +10,7 @@ SER_NAME = cma
 M_DATE = app
 
 
-#CROSS_COMPILE = /opt/freescale/usr/local/gcc-4.6.2-glibc-2.13-linaro-multilib-2011.12/fsl-linaro-toolchain/bin/arm-linux-
+CROSS_COMPILE = /opt/freescale/usr/local/gcc-4.6.2-glibc-2.13-linaro-multilib-2011.12/fsl-linaro-toolchain/bin/arm-linux-
 CXX = $(CROSS_COMPILE)gcc
 #AR  = ar cr
 COMPILE_FLAGS = -Wall

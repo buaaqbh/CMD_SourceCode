@@ -10,7 +10,8 @@
 
 #include "types.h"
 
-int   Zigbee_Get_Device(void);
+int   Zigbee_Device_Init(void);
+int   Zigbee_Get_Device(int speed);
 void  Zigbee_Release_Device(int fd);
 int   Zigbee_Set_PanID(int fd, unsigned char *pan_id);
 int   Zigbee_Read_PanID(int fd, byte *pan_id);

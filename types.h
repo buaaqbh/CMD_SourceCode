@@ -26,6 +26,8 @@
 extern "C" {
 #endif
 
+//#define CMD_SENSOR_AUTO_DETECT			1
+
 #define CMA_FRAME_TYPE_DATA				0x01
 #define CMA_FRAME_TYPE_DATA_RES			0x02
 #define CMA_FRAME_TYPE_CONTROL			0x03
