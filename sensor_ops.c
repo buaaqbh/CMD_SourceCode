@@ -12,6 +12,7 @@
 #include <sys/uio.h>
 #include <linux/can.h>
 #include <linux/can/raw.h>
+#include <pthread.h>
 #include "sensor_ops.h"
 #include "io_util.h"
 #include "list.h"
@@ -92,49 +93,6 @@ static void debug_out(byte *buf, int len)
 }
 #endif
 
-#ifdef CMD_SENSOR_AUTO_DETECT
-struct list_head s_head;
-
-static void clean_list(struct list_head *list)
-{
-	sensor_device_t *dev = NULL;
-	struct list_head *plist;
-
-	list_for_each(plist, list) {
-			dev = list_entry(plist, sensor_device_t, list);
-			free((void *)dev);
-	}
-
-	list->next = list;
-}
-
-void Sensor_Scanning(void)
-{
-	sensor_device_t *dev = NULL;
-	int i;
-	int s_num = sizeof(Sensor_CAN_List_Qixiang) / sizeof(struct can_device);
-	byte buf[24] = { 0 };
-
-	printf("CAN Sensor num: %d\n", s_num);
-
-	clean_list(&s_head);
-	for (i = 0; i < s_num; i++) {
-		if (Sensor_Can_ReadData(Sensor_CAN_List_Qixiang[i].addr, buf) < 0)
-			continue;
-		dev = (sensor_device_t *)malloc(sizeof(sensor_device_t));
-		dev->interface = 0;
-		dev->addr = Sensor_CAN_List_Qixiang[i].addr;
-		dev->type = Sensor_CAN_List_Qixiang[i].type;
-		list_add(&dev->list, &s_head);
-	}
-
-	if (list_empty(&s_head))
-		printf("Sensor List is Empty.\n");
-
-	return;
-}
-#endif
-
 int Sensor_Detect_Qixiang(void)
 {
 	int i, j, times = 3;
@@ -157,20 +115,197 @@ int Sensor_Detect_Qixiang(void)
 	return flag;
 }
 
+static Data_qixiang_t s_data;
+
+static int sample_avg(int *data, int size)
+{
+	int i;
+	int max, min, total;
+	float avg = 0.0;
+	if ((data == NULL) | (size < 2))
+		return 0;
+
+	max = min = total = data[0];
+	for (i = 1; i < size; i++) {
+		total += data[i];
+		if (data[i] > max)
+			max = data[i];
+		if (data[i] < min)
+			min = data[i];
+	}
+
+	printf("total = %d, max = %d, min = %d\n", total, max, min);
+	avg = (double)(total - max - min) / (double)(size - 2);
+
+	return (int)(avg + 0.5);
+}
+
+void *sensor_sample_qixiang_1(void * arg)
+{
+	int i;
+	byte buf[64];
+	int flag = *((int *)arg);
+	int temp[6];
+	int humi[6];
+	int pres[6];
+	int radia[6];
+	usint alarm = 0;
+
+	printf("Enter func: %s, flag = 0x%x\n", __func__, flag);
+	memset(temp, 0, 6);
+	memset(humi, 0, 6);
+	memset(pres, 0, 6);
+	memset(radia, 0, 6);
+
+	for (i = 0; i < 6; i++) {
+		if ((flag & 0x1) == 0x01) {
+			memset(buf, 0, 64);
+			if (Sensor_Can_ReadData(Sensor_CAN_List_Qixiang[0].addr, buf) == 0) {
+				temp[i] = (buf[6] << 8) | buf[7];
+				humi[i] = (buf[8] << 8) | buf[9];
+				pres[i] = (buf[10] << 8) | buf[11];
+				printf("Sample: i = %d, state = 0x%x\n", i, buf[18]);
+				printf("Sample: temp = %d, humi = %d, press = %d\n", temp[i], humi[i], pres[i]);
+				if (buf[18] != 0)
+					alarm |= (buf[18] & 0x07) << 5;
+			}
+			if (i == 5) {
+				s_data.Air_Temperature = sample_avg(temp, 6);
+				s_data.Humidity = (usint)sample_avg(humi, 6);
+				s_data.Air_Pressure = sample_avg(pres, 6);
+			}
+		}
+		if ((flag & 0x10) == 0x10) {
+			memset(buf, 0, 64);
+			if (Sensor_Can_ReadData(Sensor_CAN_List_Qixiang[4].addr, buf) == 0) {
+				radia[i] = (buf[6] << 8) | buf[7];
+				printf("Sample: i = %d, state = 0x%x\n", i, buf[18]);
+				printf("Sample: radia = %d\n", radia[i]);
+				if (buf[18] != 0)
+					alarm |= (1 << 10);
+			}
+			if (i == 5) {
+				s_data.Radiation_Intensity = sample_avg(radia, 6);
+			}
+		}
+		if (i < 5)
+			sleep(10);
+	}
+	if (flag & 0x08) {
+		memset(buf, 0, 64);
+		if (Sensor_Can_ReadData(Sensor_CAN_List_Qixiang[3].addr, buf) == 0) {
+			s_data.Precipitation = (buf[6] << 8) | buf[7];
+			s_data.Precipitation_Intensity = (buf[8] << 8) | buf[9];
+			printf("Sample: Precipitation = %d, Intensity = %d\n", s_data.Precipitation, s_data.Precipitation_Intensity);
+			if (buf[18] != 0)
+				alarm |= ((buf[18] & 0x03) << 8);
+		}
+	}
+
+	s_data.Alerm_Flag = alarm;
+
+	printf("Leave func: %s\n", __func__);
+
+	return 0;
+}
+
+static double slid_avg(int *data, int n, int k)
+{
+	double avg = 0.0;
+	double pre_avg = 0.0;
+	if (n == 1)
+		return (double)data[0];
+	pre_avg = slid_avg(data, n-1, k);
+	avg = (double)k * (data[n - 1] - pre_avg) + pre_avg;
+
+	return avg;
+}
+
+void *sensor_sample_qixiang_2(void * arg)
+{
+	int i;
+	byte buf[64];
+	int flag = *((int *)arg);
+	int speed = 0, speed_d = 0;
+
+	if ((flag & 0x2) == 0x02) {
+		memset(buf, 0, 64);
+		if (Sensor_Can_ReadData(Sensor_CAN_List_Qixiang[1].addr, buf) == 0) {
+			speed = (buf[6] << 8) | buf[7];
+			printf("Sample: i = %d, state = 0x%x\n", i, buf[18]);
+			printf("Sample: speed = %d\n", speed);
+		}
+	}
+
+	if ((flag & 0x2) == 0x04) {
+		memset(buf, 0, 64);
+		if (Sensor_Can_ReadData(Sensor_CAN_List_Qixiang[2].addr, buf) == 0) {
+			speed_d = (buf[6] << 8) | buf[7];
+			printf("Sample: i = %d, state = 0x%x\n", i, buf[18]);
+			printf("Sample: speed_d = %d\n", speed_d);
+		}
+	}
+
+	return 0;
+}
+
 int Sensor_Sample_Qixiang(void)
 {
-	byte buf[64];
 	int ret = 0;
 	int flag;
+	pthread_t p1 = -1, p2 = -1;
+	int p1_wait = 0, p2_wait = 0;
 
 	flag = Sensor_Detect_Qixiang();
 	if (flag == 0)
 		return -1;
 
-	/* Get temperature */
-	memset(buf, 0, 64);
-	if (Sensor_Can_ReadData(Sensor_CAN_List_Qixiang[0].addr, buf) == 0) {
+	if ((flag & 0x0019) != 0) {
+		ret = pthread_create(&p1, NULL, sensor_sample_qixiang_1, &flag);
+		if (ret != 0)
+			printf("Sensor: can't create thread.");
+		p1_wait = 1;
+	}
 
+	if ((flag & 0x0006) != 0) {
+		ret = pthread_create(&p2, NULL, sensor_sample_qixiang_2, &flag);
+		if (ret != 0)
+			printf("Sensor: can't create thread.");
+		p2_wait = 1;
+	}
+
+	if (p1_wait) {
+		ret = pthread_join(p1, NULL);
+		if (ret != 0)
+			printf("CMD: can't join with thread.");
+	}
+	if (p2_wait) {
+		ret = pthread_join(p2, NULL);
+		if (ret != 0)
+			printf("CMD: can't join with thread.");
+	}
+
+	printf("Sample Qixiang Data: \n");
+	if ((flag & 0x1) == 0x01) {
+		printf("温 度： %d \n", s_data.Air_Temperature);
+		printf("湿 度： %d \n", s_data.Humidity);
+		printf("大气压： %d \n", s_data.Air_Pressure);
+	}
+	if ((flag & 0x10) == 0x10) {
+		printf("光辐射： %d \n", s_data.Radiation_Intensity);
+	}
+	if (flag & 0x08) {
+		printf("降雨量： %d \n", s_data.Precipitation);
+		printf("降水强度： %d \n", s_data.Precipitation_Intensity);
+	}
+	if ((flag & 0x0002) != 0) {
+		printf("平均风速： %d \n", s_data.Average_WindSpeed_10min);
+		printf("极大风速： %d \n", s_data.Extreme_WindSpeed);
+		printf("最大风速： %d \n", s_data.Max_WindSpeed);
+		printf("标准风速： %d \n", s_data.Standard_WindSpeed);
+	}
+	if ((flag & 0x0004) != 0) {
+		printf("平均风向： %d \n", s_data.Average_WindDirection_10min);
 	}
 
 	return ret;
@@ -178,10 +313,6 @@ int Sensor_Sample_Qixiang(void)
 
 int Sensor_GetData_QiXiang(Data_qixiang_t *data)
 {
-#ifdef CMD_SENSOR_AUTO_DETECT
-	struct list_head *plist;
-	sensor_device_t *dev = NULL;
-#endif
 	int Clocktime_Stamp = time((time_t*)NULL);
 	int has_data = 0;
 	byte buf[64];
@@ -191,34 +322,6 @@ int Sensor_GetData_QiXiang(Data_qixiang_t *data)
 	flag = Sensor_Detect_Qixiang();
 	printf("Sensor exist flag = 0x%x \n", flag);
 
-#ifdef CMD_SENSOR_AUTO_DETECT
-	list_for_each(plist, &s_head) {
-		dev = list_entry(plist, sensor_device_t, list);
-		printf("Sensor Device: interface = %d, type = %d, addr = 0x%x\n", dev->interface, dev->type, dev->addr);
-		switch (dev->type) {
-		case SENSOR_TEMP:
-		{
-			if (dev->interface == 0) {
-				memset(buf, 0, 64);
-				if (Sensor_Can_ReadData(dev->addr, buf) < 0)
-					break;
-			}
-			break;
-		}
-		case SENSOR_WSPEED:
-			break;
-		case SENSOR_WDIRECTION:
-			break;
-		case SENSOR_RAIN:
-			break;
-		case SENSOR_RADIATION:
-			break;
-		default:
-			break;
-		}
-
-	}
-#else
 	/* Get temperature */
 	memset(buf, 0, 64);
 	if (Sensor_Can_ReadData(Sensor_CAN_List_Qixiang[0].addr, buf) == 0) {
@@ -247,7 +350,6 @@ int Sensor_GetData_QiXiang(Data_qixiang_t *data)
 		if (buf[18] == 1)
 			data->Alerm_Flag |= 0x0400;
 	}
-#endif
 
 	data->Time_Stamp = Clocktime_Stamp;
 	if (has_data != 1)
@@ -458,7 +560,7 @@ int Sensor_Can_ReadData(usint addr, byte *buf)
 	struct can_frame frame = {
 		.can_id = 1,
 	};
-	int s, ret, i, j;
+	int s, ret, i;
 	byte cmd[8] = {0x05, 0x01};
 	usint crc16 = 0;
 	byte *pbuf = NULL;
@@ -496,7 +598,6 @@ int Sensor_Can_ReadData(usint addr, byte *buf)
 	pbuf = buf;
 	for (i = 0; i < 3; i++) {
 		if ((ret = io_readn(s, &frame, sizeof(struct can_frame), timeout)) < 0) {
-			printf("return -1\n");
 			perror("read");
 			close(s);
 			return -1;
@@ -505,6 +606,7 @@ int Sensor_Can_ReadData(usint addr, byte *buf)
 		pbuf += frame.can_dlc;
 #ifdef _DEBUG
 //		printf("nbytes = %d, dlc = %d\n", ret, frame.can_dlc);
+		int j;
 		for (j = 0; j < 8; j++)
 			printf("%02x ", frame.data[j]);
 		printf("\n");

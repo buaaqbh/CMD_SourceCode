@@ -577,7 +577,6 @@ int Zigbee_Device_Init(void)
 	int channel = 0x16;
 	int type = 0; /* Coordinator */
 	int bitrate;
-	int i = 0;
 	byte rbuf[8] = {0};
 	int fd;
 

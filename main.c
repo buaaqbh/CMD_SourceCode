@@ -8,6 +8,7 @@
 #include <signal.h>
 #include <getopt.h>
 #include <pthread.h>
+#include <time.h>
 #include "cma_commu.h"
 #include "device.h"
 #include "socket_lib.h"
@@ -15,6 +16,7 @@
 #include "zigbee_ops.h"
 #include "list.h"
 #include "types.h"
+#include "rtc_alarm.h"
 
 char *config_file = NULL;
 pthread_spinlock_t spinlock;
@@ -106,42 +108,52 @@ void udpServerThrFxn(void)
 	return;
 }
 
-#ifdef CMD_SENSOR_AUTO_DETECT
-void *Sensor_Auto_Detect(void * arg)
-{
-	int cycle = 1 * 60;
-	while (1) {
-		Sensor_Scanning();
-		if (rtc_timer(cycle) < 0) {
-			printf("CMD: Rtc time error.\n");
-			sleep(cycle);
-		}
-	}
-	return 0;
-}
-#endif
-
 void *main_sample_loop(void * arg)
 {
-	int cycle = 10;
+	int cycle = 30;
 	printf("Enter func: %s \n", __func__);
 	while (1) {
 		/*
 		 *  Get Data from Sensor
 		 */
-		system_sleep_enable(0);
-		CMA_Send_SensorData(-1, CMA_MSG_TYPE_DATA_QXENV);
-		system_sleep_enable(1);
+//		system_sleep_enable(0);
+//		CMA_Send_SensorData(-1, CMA_MSG_TYPE_DATA_QXENV);
+//		Sensor_Sample_Qixiang();
+//		system_sleep_enable(1);
 
-		alarm(2);
-		printf("RTC timer: %d sec\n", cycle);
+//		alarm(2);
+		sleep(30);
+//		printf("RTC timer: %d sec\n", cycle);
+/*
 		if (rtc_timer(cycle) < 0) {
 			printf("CMD: Rtc time error.\n");
 			alarm(0);
 			sleep(cycle);
 			continue;
 		}
+*/
 	}
+
+	return 0;
+}
+
+void * rtc_alarm_func1(void *arg)
+{
+	printf("Enter func: %s \n", __func__);
+
+	return 0;
+}
+
+void * rtc_alarm_func2(void *arg)
+{
+	printf("Enter func: %s \n", __func__);
+
+	return 0;
+}
+
+void * rtc_alarm_func3(void *arg)
+{
+	printf("Enter func: %s \n", __func__);
 
 	return 0;
 }
@@ -167,9 +179,6 @@ int main(int argc, char *argv[])
 	int s_socket;
 	pthread_t pthread;
 	int ret;
-#ifdef CMD_SENSOR_AUTO_DETECT
-	pthread_t p_sensor;
-#endif
 
 	config_file = CMA_CONFIG_FILE;
 
@@ -228,18 +237,40 @@ int main(int argc, char *argv[])
 
 	pthread_spin_init(&spinlock, 0);
 
-#ifdef CMD_SENSOR_AUTO_DETECT
-	INIT_LIST_HEAD(&s_head);
-
-	ret = pthread_create(&p_sensor, NULL, Sensor_Auto_Detect, NULL);
-	if (ret != 0)
-		printf("CMD: can't create thread.");
-#endif
-
 	if (signal(SIGALRM, enter_sleep) == SIG_ERR) {
 		printf("CMD: sinal init error.\n");
 		return -1;
 	}
+
+//	{
+		struct rtc_alarm_dev timer1, timer2, timer3;
+		time_t tm1;
+
+		rtc_alarm_init();
+
+		memset(&timer1, 0, sizeof(struct rtc_alarm_dev));
+		memset(&timer2, 0, sizeof(struct rtc_alarm_dev));
+		memset(&timer3, 0, sizeof(struct rtc_alarm_dev));
+		timer1.expect = rtc_get_time() + 20;
+		timer1.func = rtc_alarm_func1;
+		timer2.expect = rtc_get_time() + 10;
+		timer2.func = rtc_alarm_func2;
+		timer2.repeat = 1;
+		timer2.interval = 5;
+		timer3.expect = rtc_get_time() + 17;
+		timer3.func = rtc_alarm_func3;
+		timer3.repeat = 1;
+		timer3.interval = 7;
+
+		tm1 = rtc_get_time();
+		printf("Now: %d\n", tm1);
+		printf("Now: %s", asctime(localtime(&tm1)));
+
+		rtc_alarm_add(&timer1);
+		rtc_alarm_add(&timer2);
+		rtc_alarm_add(&timer3);
+		rtc_alarm_update();
+//	}
 
 
 	if (Zigbee_Device_Init() < 0) {
@@ -268,12 +299,6 @@ int main(int argc, char *argv[])
 	ret = pthread_create(&pthread, NULL, main_sample_loop, NULL);
 	if (ret != 0)
 		printf("CMD: can't create thread.");
-
-#ifdef CMD_SENSOR_AUTO_DETECT
-	ret = pthread_join(p_sensor, NULL);
-	if (ret != 0)
-		printf("CMD: can't join with thread.");
-#endif
 
 	ret = pthread_join(pthread, NULL);
 	if (ret != 0)
