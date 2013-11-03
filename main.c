@@ -53,75 +53,86 @@ void system_sleep_enable(int enable)
 	pthread_spin_unlock(&spinlock);
 }
 
-void *tcpServerThrFxn(void * arg)
+void *socket_receive_func(void * arg)
 {
-	ServerEnv * envp = (ServerEnv *)arg;
-	int socketfd = envp->m_hSocket;
 	byte rbuf[MAX_COMBUF_SIZE];
 	int ret;
 
-	printf("socke fd = %d\n", socketfd);
-	while (1) {
-		memset(rbuf, 0, MAX_DATA_BUFSIZE);
-		ret = Commu_GetPacket(socketfd, rbuf, MAX_COMBUF_SIZE);
-		if (ret == -2) {
-			printf("CMD Server receive MSG error!\n");
-			break;
+	fprintf(stdout, "Enter func: %s --\n", __func__);
+
+	while(1) {
+		if (CMA_Env_Parameter.socket_fd > 0) {
+			memset(rbuf, 0, MAX_DATA_BUFSIZE);
+			printf("CMD: Start to read socket message.\n");
+//			ret = Commu_GetPacket(CMA_Env_Parameter.socket_fd, rbuf, MAX_COMBUF_SIZE, 0);
+			ret = Commu_GetPacket(-1, rbuf, MAX_COMBUF_SIZE, 0);
+			if (ret == -2) {
+				printf("CMD Server receive MSG error!\n");
+				CMA_Env_Parameter.socket_fd = -1;
+			}
+			else if (ret < 0)
+				continue;
+
+			system_sleep_enable(0);
+
+			if (CMA_Server_Process(CMA_Env_Parameter.socket_fd, rbuf) < 0) {
+				printf("CMD Server Process error.\n");
+				continue;
+			}
+
+			system_sleep_enable(1);
 		}
-		else if (ret < 0)
-			continue;
 
-		system_sleep_enable(0);
-
-		if (CMA_Server_Process(socketfd, rbuf) < 0) {
-			printf("CMD Server Process error.\n");
-			continue;
-		}
-
-		system_sleep_enable(1);
+		sleep(2);
 	}
 
-	close_socket(socketfd);
 	return 0;
 }
 
-void udpServerThrFxn(void)
+void *socket_heartbeat_func(void * arg)
 {
-	byte rbuf[MAX_COMBUF_SIZE];
-	int ret;
+	fprintf(stdout, "Enter func: %s --\n", __func__);
 
 	while (1) {
-		memset(rbuf, 0, MAX_DATA_BUFSIZE);
-		ret = Commu_GetPacket(-1, rbuf, MAX_COMBUF_SIZE);
-		if (ret < 0)
-			continue;
+		if (CMA_Env_Parameter.socket_fd < 0) {
+			CMA_Env_Parameter.socket_fd = connect_server(CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.cma_port);
+			if (CMA_Env_Parameter.socket_fd < 0) {
+				fprintf(stderr, "CMD: Can't Connect to socket server.\n");
+				sleep(5);
+				continue;
+			}
 
-		system_sleep_enable(0);
-
-		if (CMA_Server_Process(-1, rbuf) < 0) {
-			printf("CMD: Server Process error.\n");
-			continue;
+			fprintf(stdout, "CMD: Send HeartBeat Message.\n");
+			if (CMA_Send_HeartBeat(CMA_Env_Parameter.socket_fd, CMA_Env_Parameter.id) < 0) {
+				fprintf(stderr, "CMD: Send HeartBeat Message error.\n");
+				CMA_Env_Parameter.socket_fd = -1;
+			}
 		}
-
-		system_sleep_enable(1);
-	}
-
-	return;
-}
-
-void *socket_server_func(void * arg)
-{
-	int s_socket;
-
-	if (CMA_Env_Parameter.s_protocal == 0) {
-		udpServerThrFxn();
-	}
-	else {
-		if ((s_socket = start_server(CMA_Env_Parameter.local_port, tcpServerThrFxn)) < 0) {
-			printf("Start Local Socket Server error.\n");
-			exit(-1);
+/*
+		fprintf(stdout, "CMD: Send HeartBeat Message.\n");
+		if (CMA_Send_HeartBeat(CMA_Env_Parameter.socket_fd, CMA_Env_Parameter.id) < 0) {
+			fprintf(stderr, "CMD: Send HeartBeat Message error.\n");
+			CMA_Env_Parameter.socket_fd = -1;
 		}
-		close_socket(s_socket);
+*/
+#if 0
+		int timeout = 500;
+		CMD_Response_data = -1;
+		CMA_Send_BasicInfo(CMA_Env_Parameter.socket_fd, CMA_Env_Parameter.id);
+		while ((timeout--) && (CMD_Response_data == -1))  {
+			usleep(10000);
+		}
+		if (CMD_Response_data == 0x00) {
+			fprintf(stdout, "CMD: Response error.\n");
+		}
+		else if (CMD_Response_data == 0xff) {
+			fprintf(stdout, "CMD: Response OK.\n");
+		}
+		else
+			fprintf(stdout, "CMD: Can't Get Msg Response.\n");
+#endif
+
+		sleep(60);
 	}
 
 	return 0;
@@ -130,8 +141,6 @@ void *socket_server_func(void * arg)
 void *main_sample_loop(void * arg)
 {
 	printf("Enter func: %s \n", __func__);
-
-	CMA_Send_HeartBeat(-1, CMA_Env_Parameter.id);
 
 	system_sleep_enable(0);
 //	CMA_Send_SensorData(-1, CMA_MSG_TYPE_DATA_QXENV);
@@ -160,7 +169,7 @@ int main(int argc, char *argv[])
 {
 	int index, c;
 	int l2_type = 0;
-	pthread_t pid_socket;
+	pthread_t pid_socket, p_heartbeat;
 	time_t now, expect;
 	int cycle;
 	struct tm *tm;
@@ -238,7 +247,21 @@ int main(int argc, char *argv[])
 		printf("Zigbee Device Init Error.\n");
 	}
 
-	ret = pthread_create(&pid_socket, NULL, socket_server_func, NULL);
+
+	CMA_Env_Parameter.socket_fd = connect_server(CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.cma_port);
+	if (CMA_Env_Parameter.socket_fd > 0) {
+		fprintf(stdout, "CMD: Send HeartBeat Message.\n");
+		if (CMA_Send_HeartBeat(CMA_Env_Parameter.socket_fd, CMA_Env_Parameter.id) < 0) {
+			fprintf(stderr, "CMD: Send HeartBeat Message error.\n");
+			CMA_Env_Parameter.socket_fd = -1;
+		}
+	}
+
+	ret = pthread_create(&p_heartbeat, NULL, socket_heartbeat_func, NULL);
+	if (ret != 0)
+		printf("Sensor: can't create thread.");
+
+	ret = pthread_create(&pid_socket, NULL, socket_receive_func, NULL);
 	if (ret != 0)
 		printf("Sensor: can't create thread.");
 
@@ -266,9 +289,13 @@ int main(int argc, char *argv[])
 
 	while (1) {
 		sleep(60);
-		if (rtc_alarm_isActive(&sample_dev))
-			printf("Main Sample rtc timer is atcive.\n");
+//		if (rtc_alarm_isActive(&sample_dev))
+//			printf("Main Sample rtc timer is atcive.\n");
 	}
+
+	ret = pthread_join(p_heartbeat, NULL);
+	if (ret != 0)
+		printf("CMD: can't join with p2 thread.");
 
 	ret = pthread_join(pid_socket, NULL);
 	if (ret != 0)

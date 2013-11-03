@@ -424,6 +424,7 @@ int Sensor_Sample_Qixiang(void)
 	data_qixiang_flag = 0;
 	memset(&record, 0, sizeof(struct record_qixiang));
 	record.tm = rtc_get_time();
+	record.data.Time_Stamp = record.tm;
 
 	printf("CMD: sample Weather data start.\n");
 

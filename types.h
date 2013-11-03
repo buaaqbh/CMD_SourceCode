@@ -98,6 +98,7 @@ extern unsigned int Sensor_Online_flag;
 unsigned char 	Sensor_L1_type[CMA_MAX_SENSOR_NUM];
 
 extern char *config_file;
+extern volatile int CMD_Response_data;
 
 typedef unsigned long 	ulint;
 typedef long 			lint;
@@ -120,6 +121,7 @@ typedef struct env_data {
 	usint 	cma_port;
 	char	cma_domain[64];
 	int 	s_protocal;
+	int 	socket_fd;
 } env_data_t;
 
 extern env_data_t CMA_Env_Parameter;
@@ -366,6 +368,7 @@ typedef struct _alarm_value {
 #pragma pack() 
 
 #define RECORD_FILE_QIXIANG 	"record_qixiang.dat"
+#define RECORD_FILE_TGQXIE 		"record_tgqxie.dat"
 
 struct record_qixiang {
 	time_t tm;

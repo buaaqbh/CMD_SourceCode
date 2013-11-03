@@ -83,7 +83,8 @@ int connect_server(char *destIp, int destPort)
     struct sockaddr_in address;
     int s_socket;
 
-    s_socket = socket(AF_INET, SOCK_STREAM, 0);
+//	s_socket = socket(AF_INET, SOCK_STREAM, 0);
+    s_socket = socket(AF_INET, SOCK_DGRAM, 0);
 	
     // set server addr
     bzero(&address,sizeof(address)); 
@@ -185,7 +186,7 @@ int socket_recv(int sockfd, unsigned char *buf, int len, int timeout)
 
 	while(1) {
 		recvBytes = recv(sockfd, p_buf, total_len, 0);
-//		printf("recv return: %d, errno = %d\n", recvBytes, errno);
+//		printf("recv return: %d, requred len = %d, errno = %d\n", recvBytes, len, errno);
 		if( recvBytes < 0 && errno != EINTR) {
 			if ((errno == EWOULDBLOCK) || (errno == EAGAIN))
 				printf("Receive timeout.\n");
@@ -201,11 +202,9 @@ int socket_recv(int sockfd, unsigned char *buf, int len, int timeout)
 		}
 		else if( recvBytes > 0 )
 		{
-			if (recvBytes >= total_len) {
-				printf("Receive Message OK, len = %d!\n", recvBytes);
+			if (recvBytes == total_len) {
 				break;
 			}
-			printf("Receive Message partially, recvBytes = %d \n", recvBytes);
 			total_len -= recvBytes;
 			p_buf += recvBytes;
 			if (timeout == 0)
@@ -218,7 +217,7 @@ int socket_recv(int sockfd, unsigned char *buf, int len, int timeout)
 		}
 	}
 
-	return (len - total_len);
+	return len;
 }
 
 int socket_send_udp(char *destIp, int destPort, unsigned char *buf, int len)

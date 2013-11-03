@@ -14,6 +14,8 @@
 #include "rtc_alarm.h"
 #include "file_ops.h"
 
+volatile int CMD_Response_data = 0;
+
 #define _DEBUG
 
 #ifdef _DEBUG
@@ -70,10 +72,9 @@ int Commu_GetPacket_Udp(int localport, byte *rbuf, int len)
 	return ret;
 }
 
-int Commu_GetPacket(int fd, byte *rbuf, int len)
+int Commu_GetPacket(int fd, byte *rbuf, int len, int timeout)
 {
 	int ret = 0;
-	int timeout = 5;
 	usint crc16 = 0;
 	usint size;
 
@@ -91,7 +92,7 @@ int Commu_GetPacket(int fd, byte *rbuf, int len)
 		return Commu_GetPacket_Udp(CMA_Env_Parameter.local_port, rbuf, len);
 	}
 
-	printf("Begin to receive msg, len = %d\n", len);
+//	printf("Begin to receive msg, len = %d\n", len);
 	
 	ret = socket_recv(fd, rbuf, sizeof(frame_head_t), timeout);
 	if (ret < 0)
@@ -102,9 +103,10 @@ int Commu_GetPacket(int fd, byte *rbuf, int len)
 	}
 	
 	memcpy(&size, (rbuf + 2), 2);
-	printf("size = %d \n", size);
-	if ((size <= 0) || (ret != sizeof(frame_head_t)))
+//	printf("size = %d \n", size);
+	if ((size <= 0) || (ret != sizeof(frame_head_t))) {
 		return -1;
+	}
 	
 	ret = socket_recv(fd, (rbuf + sizeof(frame_head_t)), (size + 2), timeout);
 	if (ret < 0)
@@ -171,9 +173,14 @@ int CMA_Server_Process(int fd, byte *rbuf)
 	frame_head_t *f_head = (frame_head_t *)rbuf;
 	byte frame_type = f_head->frame_type;
 	byte msg_type = f_head->msg_type;
+	byte id[18] = {0};
+	byte status = 0;
 	int ret = 0;
 
 	printf("Enter func: %s \n", __func__);
+	memcpy(id, f_head->id, 17);
+	fprintf(stdout, "CMD: Receive Message, id = %s, frame type = 0x%x, msg type = 0x%x\n",
+						id, f_head->frame_type, f_head->msg_type);
 	if (memcmp(f_head->id, CMA_Env_Parameter.id, 17) != 0) {
 		fprintf(stderr, "Device ID: %s, MSG ID: %s, Miss Match.\n", f_head->id, CMA_Env_Parameter.id);
 		return -1;
@@ -250,6 +257,16 @@ int CMA_Server_Process(int fd, byte *rbuf)
 			printf("CMA: Invalid MSG type.\n");
 		}
 	}
+	else if (frame_type == CMA_FRAME_TYPE_DATA_RES) {
+		status = *(rbuf + sizeof(frame_head_t));
+		fprintf(stdout, "CMD: Send data response 0x%x.\n", status);
+		CMD_Response_data = status;
+	}
+	else if (frame_type == CMA_FRAME_TYPE_STATUS_RES) {
+		status = *(rbuf + sizeof(frame_head_t));
+		fprintf(stdout, "CMD: Send device status response 0x%x.\n", status);
+		CMD_Response_data = status;
+	}
 
 	return ret;
 }
@@ -259,8 +276,6 @@ int CMA_Send_SensorData(int fd, int type, void *data)
 	char *id = CMA_Env_Parameter.id;
 	frame_head_t f_head;
 	byte data_buf[MAX_DATA_BUFSIZE];
-	byte rbuf[MAX_COMBUF_SIZE];
-	int ret;
 
 	printf("CMA Send Sensor Data.\n");
 	memset(&f_head, 0, sizeof(frame_head_t));
@@ -319,10 +334,28 @@ int CMA_Send_SensorData(int fd, int type, void *data)
 	if (Commu_SendPacket(fd, &f_head, (byte *)data) < 0)
 		return -1;
 
-	memset(rbuf, 0, MAX_DATA_BUFSIZE);
-	ret = Commu_GetPacket(fd, rbuf, MAX_COMBUF_SIZE);
-
 	return 0;
+}
+
+int CMA_Wait_SensorData_Res(int fd, int type)
+{
+	frame_head_t *p_head = NULL;
+	byte rbuf[MAX_COMBUF_SIZE];
+	byte status = 0;
+	int ret;
+
+	ret = Commu_GetPacket(CMA_Env_Parameter.socket_fd, rbuf, MAX_COMBUF_SIZE, 5);
+	if (ret < 0)
+		return ret;
+
+	p_head = (frame_head_t *)rbuf;
+	if ((type == p_head->msg_type) && (p_head->frame_type == CMA_FRAME_TYPE_DATA_RES)) {
+		status = *(rbuf + sizeof(frame_head_t));
+		if (status == 0xff)
+			return 0;
+	}
+
+	return -1;
 }
 
 int CMA_Time_SetReq_Response(int fd, byte *rbuf)
@@ -392,6 +425,76 @@ int CMA_NetAdapter_SetReq_Response(int fd, byte *rbuf)
 	return 0;
 }
 
+static int CMA_Send_RecordingData(int fd, byte type, time_t start, time_t end)
+{
+	byte record[256];
+	int total = 0;
+	int record_len;
+	char *filename = NULL;
+	int i;
+	time_t t_max, t_min, t;
+
+	switch (type) {
+	case CMA_MSG_TYPE_DATA_QXENV:
+		filename = RECORD_FILE_QIXIANG;
+		record_len = sizeof(struct record_qixiang);
+		break;
+	case CMA_MSG_TYPE_DATA_TGQXIE:
+//		filename = RECORD_FILE_TGQXIE;
+//		break;
+	case CMA_MSG_TYPE_DATA_DDXWFTZ:
+//		break;
+	case CMA_MSG_TYPE_DATA_DDXWFBX:
+//		break;
+	case CMA_MSG_TYPE_DATA_DXHCH:
+//		break;
+	case CMA_MSG_TYPE_DATA_DXWD:
+//		break;
+	case CMA_MSG_TYPE_DATA_FUBING:
+//		break;
+	case CMA_MSG_TYPE_DATA_DXFP:
+//		break;
+	case CMA_MSG_TYPE_DATA_DXWDTZH:
+//		break;
+	case CMA_MSG_TYPE_DATA_DXWDGJ:
+//		break;
+	case CMA_MSG_TYPE_DATA_XCHWS:
+//		break;
+	default:
+		printf("Invalid Sensor tyep.\n");
+		return -1;
+	}
+
+	total = File_GetNumberOfRecords(filename, record_len);
+	if (total == 0) {
+		return 0;
+	}
+
+	if (start > end) {
+		t_max = start;
+		t_min = end;
+	}
+	else {
+		t_max = end;
+		t_min = start;
+	}
+
+	for (i = 0; i < total; i++) {
+		memset(&record, 0, record_len);
+		memset(&t, 0, sizeof(time_t));
+		if (File_GetRecordByIndex(filename, &record, record_len, i) == record_len) {
+			memcpy(&t, record, sizeof(time_t));
+			if ((t <= t_max) && (t >= t_min)) {
+				CMA_Send_SensorData(fd, type, (record + sizeof(time_t)));
+				if (CMA_Wait_SensorData_Res(fd, type) == 0)
+					fprintf(stdout, "CMD: Send Data reponse OK.\n");
+			}
+		}
+	}
+
+	return 0;
+}
+
 int CMA_RequestData_Response(int fd, byte *rbuf)
 {
 	frame_head_t *p_head = (frame_head_t *)rbuf;
@@ -399,11 +502,6 @@ int CMA_RequestData_Response(int fd, byte *rbuf)
 	byte sbuf[MAX_DATA_BUFSIZE];
 	int time_start = 0, time_end = 0;
 	
-	struct record_qixiang record;
-	int total = 0;
-	int record_len = sizeof(struct record_qixiang);
-	int i;
-
 	memset(sbuf, 0, MAX_DATA_BUFSIZE);
 	sbuf[0] = 0xff;
 	
@@ -426,17 +524,7 @@ int CMA_RequestData_Response(int fd, byte *rbuf)
 	if (Commu_SendPacket(fd, p_head, sbuf) < 0)
 		return -1;
 
-	total = File_GetNumberOfRecords(RECORD_FILE_QIXIANG, record_len);
-	if (total == 0) {
-		return 0;
-	}
-//	for (i = 0; i < total; i++) {
-	i = 0;
-		memset(&record, 0, sizeof(struct record_qixiang));
-		if (File_GetRecordByIndex(RECORD_FILE_QIXIANG, &record, record_len, i) == record_len) {
-			CMA_Send_SensorData(fd, req_type, &record.data);
-		}
-//	}
+	CMA_Send_RecordingData(fd, req_type, time_start, time_end);
 
 	return 0;
 }
