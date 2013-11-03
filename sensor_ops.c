@@ -14,8 +14,27 @@
 #include <linux/can/raw.h>
 #include <pthread.h>
 #include "sensor_ops.h"
+#include "rtc_alarm.h"
+#include "file_ops.h"
 #include "io_util.h"
 #include "list.h"
+
+#define RECORD_FILE_WINDSEC		"record_windsec.dat"
+#define RECORD_FILE_WINDAVG		"record_windavg.dat"
+
+struct record_winsec {
+	time_t tm;
+	int speed_sec;
+};
+
+struct record_winavg {
+	time_t tm;
+	int speed_avg;
+	int speed_d_avg;
+};
+
+struct rtc_alarm_dev wind_sec;
+struct rtc_alarm_dev wind_avg;
 
 #define  CAN_DEVICE_NAME	"can0"
 unsigned int Sensor_Online_flag = 0;
@@ -23,6 +42,8 @@ struct can_device {
 	int type;
 	usint addr;
 };
+
+pthread_mutex_t can_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 enum sensor_type {
 	SENSOR_TEMP = 0,
@@ -56,6 +77,8 @@ static struct can_device Sensor_CAN_List_Qixiang[] = {
 		.addr = 0x0023,
 	},
 };
+
+/*
 static struct can_device Sensor_CAN_List_Angle[] = {
 	{
 		.type = SENSOR_ANGLE,
@@ -74,6 +97,7 @@ static struct can_device Sensor_CAN_List_Angle[] = {
 		.addr = 0x003e,
 	},
 };
+*/
 
 typedef struct sensor_device {
 	int interface; /* 0: CAN, 1: Zigbee */
@@ -116,6 +140,7 @@ int Sensor_Detect_Qixiang(void)
 }
 
 static Data_qixiang_t s_data;
+static int data_qixiang_flag = 0;
 
 static int sample_avg(int *data, int size)
 {
@@ -138,6 +163,56 @@ static int sample_avg(int *data, int size)
 	avg = (double)(total - max - min) / (double)(size - 2);
 
 	return (int)(avg + 0.5);
+}
+
+static void get_wind_data(Data_qixiang_t *data)
+{
+	struct record_winsec r_sec;
+	struct record_winavg r_avg;
+	int r_num = 0;
+	int r_len = 0;
+	int i = 0;
+	time_t now;
+
+	now = rtc_get_time();
+
+	data->Average_WindSpeed_10min = 0;
+	data->Average_WindDirection_10min = 0;
+	data->Max_WindSpeed = 0;
+	data->Extreme_WindSpeed = 0;
+	data->Standard_WindSpeed = 0;
+
+	r_len = sizeof(struct record_winavg);
+	r_num = File_GetNumberOfRecords(RECORD_FILE_WINDAVG, r_len);
+	if (r_num > 0) {
+		File_GetRecordByIndex(RECORD_FILE_WINDAVG, &r_avg, r_len, (r_num - 1));
+		if (r_avg.tm > (now - 60 * 60)) {
+			data->Average_WindSpeed_10min = r_avg.speed_avg;
+			data->Average_WindDirection_10min = r_avg.speed_d_avg;
+		}
+	}
+	for (i = (r_num - 1); i >= 0; i++) {
+		File_GetRecordByIndex(RECORD_FILE_WINDAVG, &r_avg, r_len, i);
+		if (r_avg.tm < (now - 24 * 60 * 60))
+			break;
+		if (r_avg.speed_avg > data->Max_WindSpeed)
+			data->Max_WindSpeed = r_avg.speed_avg;
+	}
+
+	r_len = sizeof(struct record_winsec);
+	r_num = File_GetNumberOfRecords(RECORD_FILE_WINDSEC, r_len);
+	for (i = (r_num - 1); i >= 0; i++) {
+		File_GetRecordByIndex(RECORD_FILE_WINDSEC, &r_sec, r_len, i);
+		if (r_sec.tm < (now - 60 * 60))
+			break;
+		if (r_sec.speed_sec > data->Extreme_WindSpeed)
+			data->Extreme_WindSpeed = r_sec.speed_sec;
+	}
+
+	/* ?????????? */
+	data->Standard_WindSpeed = data->Extreme_WindSpeed;
+
+	return;
 }
 
 void *sensor_sample_qixiang_1(void * arg)
@@ -209,41 +284,127 @@ void *sensor_sample_qixiang_1(void * arg)
 	return 0;
 }
 
-static double slid_avg(int *data, int n, int k)
+static double slid_avg(int *data, int n, double k, int flag)
 {
 	double avg = 0.0;
 	double pre_avg = 0.0;
+	double E = 0.0;
+
 	if (n == 1)
 		return (double)data[0];
-	pre_avg = slid_avg(data, n-1, k);
-	avg = (double)k * (data[n - 1] - pre_avg) + pre_avg;
+	pre_avg = slid_avg(data, n-1, k, flag);
+
+	E = data[n - 1] - pre_avg;
+	if (flag == 1) {
+		if (E > 180)
+			E -= 360;
+		if (E < (-180))
+			E += 360;
+	}
+	avg = (double)k * E + pre_avg;
+	if (flag == 1) {
+		if (avg > 360)
+			avg -= 360;
+		if (avg < 0)
+			avg += 360;
+	}
 
 	return avg;
 }
 
-void *sensor_sample_qixiang_2(void * arg)
+void *sensor_sample_windSec(void * arg)
 {
-	int i;
+	int i = 0;
 	byte buf[64];
-	int flag = *((int *)arg);
-	int speed = 0, speed_d = 0;
+	int speed[3];
+	struct record_winsec record;
+	int record_len = 0;
 
-	if ((flag & 0x2) == 0x02) {
+	memset(&record, 0, sizeof(struct record_winsec));
+	record.tm = rtc_get_time();
+	memset(speed, 0, 3);
+	for (i = 0; i < 3; i++) {
 		memset(buf, 0, 64);
 		if (Sensor_Can_ReadData(Sensor_CAN_List_Qixiang[1].addr, buf) == 0) {
-			speed = (buf[6] << 8) | buf[7];
+			speed[i] = (buf[6] << 8) | buf[7];
 			printf("Sample: i = %d, state = 0x%x\n", i, buf[18]);
-			printf("Sample: speed = %d\n", speed);
+			printf("Sample: speed = %d\n", speed[i]);
 		}
+		if (i == 2) {
+			record.speed_sec = (speed[0] + speed[1] + speed[2]) / 3;
+		}
+		if (i < 2)
+			sleep(1);
 	}
 
-	if ((flag & 0x2) == 0x04) {
-		memset(buf, 0, 64);
-		if (Sensor_Can_ReadData(Sensor_CAN_List_Qixiang[2].addr, buf) == 0) {
-			speed_d = (buf[6] << 8) | buf[7];
-			printf("Sample: i = %d, state = 0x%x\n", i, buf[18]);
-			printf("Sample: speed_d = %d\n", speed_d);
+	record_len = sizeof(struct record_winsec);
+	if (File_AppendRecord(RECORD_FILE_WINDSEC, (char *)&record, record_len) < 0) {
+		printf("CMD: Recording wind speed data error.\n");
+	}
+
+	return 0;
+}
+
+void *sensor_sample_windAvg(void * arg)
+{
+	int i = 0;
+	byte buf[64];
+	int flag = *((int *)arg);
+	int speed[10], speed_d[10];
+	struct record_winavg record;
+	int record_len = 0;
+
+	memset(&record, 0, sizeof(struct record_winavg));
+	record.tm = rtc_get_time();
+	memset(speed, 0, 10);
+	memset(speed_d, 0, 10);
+
+	for (i = 0; i < 10; i++) {
+		if ((flag & 0x2) == 0x02) {
+			memset(buf, 0, 64);
+			if (Sensor_Can_ReadData(Sensor_CAN_List_Qixiang[1].addr, buf) == 0) {
+				speed[i] = (buf[6] << 8) | buf[7];
+				printf("Sample: i = %d, state = 0x%x\n", i, buf[18]);
+				printf("Sample: speed = %d\n", speed[i]);
+			}
+			if (i == 9) {
+				record.speed_avg = slid_avg(speed, 10, 0.3, 0);
+			}
 		}
+
+		if ((flag & 0x4) == 0x04) {
+			memset(buf, 0, 64);
+			if (Sensor_Can_ReadData(Sensor_CAN_List_Qixiang[2].addr, buf) == 0) {
+				speed_d[i] = (buf[6] << 8) | buf[7];
+				printf("Sample: i = %d, state = 0x%x\n", i, buf[18]);
+				printf("Sample: speed_d = %d\n", speed_d[i]);
+			}
+			if (i == 9) {
+				record.speed_d_avg = slid_avg(speed_d, 10, 0.3, 1);
+			}
+		}
+		if (i < 9)
+			sleep(60);
+	}
+
+	record_len = sizeof(struct record_winavg);
+	if (File_AppendRecord(RECORD_FILE_WINDAVG, (char *)&record, record_len) < 0) {
+		printf("CMD: Recording wind average speed data error.\n");
+	}
+
+	return 0;
+}
+
+void *sensor_qixiang_zigbee(void * arg)
+{
+	byte buf[16];
+	printf("Sensor: Get data from zigbee device.\n");
+
+	memset(buf, 0, 16);
+	if (Sensor_Zigbee_ReadData(buf, 13) == 0) {
+		s_data.Precipitation = (buf[4] << 8) | buf[5];
+		s_data.Precipitation_Intensity = (buf[6] << 8) | buf[7];
+		data_qixiang_flag++;
 	}
 
 	return 0;
@@ -254,11 +415,28 @@ int Sensor_Sample_Qixiang(void)
 	int ret = 0;
 	int flag;
 	pthread_t p1 = -1, p2 = -1;
-	int p1_wait = 0, p2_wait = 0;
+	int p1_wait = 0;
+	time_t now, expect;
+	struct tm *tm;
+	struct record_qixiang record;
+	int record_len = 0;
+
+	data_qixiang_flag = 0;
+	memset(&record, 0, sizeof(struct record_qixiang));
+	record.tm = rtc_get_time();
+
+	printf("CMD: sample Weather data start.\n");
+
+	/* Zigbee Sensor Operation */
+	ret = pthread_create(&p2, NULL, sensor_qixiang_zigbee, NULL);
+	if (ret != 0)
+		printf("Sensor: can't create thread.");
 
 	flag = Sensor_Detect_Qixiang();
-	if (flag == 0)
-		return -1;
+	if (flag != 0)
+		data_qixiang_flag++;
+
+	memset(&s_data, 0, sizeof(Data_qixiang_t));
 
 	if ((flag & 0x0019) != 0) {
 		ret = pthread_create(&p1, NULL, sensor_sample_qixiang_1, &flag);
@@ -267,93 +445,85 @@ int Sensor_Sample_Qixiang(void)
 		p1_wait = 1;
 	}
 
+	if ((flag & 0x0006) == 0)
+		rtc_alarm_del(&wind_avg);
+	if ((flag & 0x0002) == 0)
+		rtc_alarm_del(&wind_sec);
+
 	if ((flag & 0x0006) != 0) {
-		ret = pthread_create(&p2, NULL, sensor_sample_qixiang_2, &flag);
-		if (ret != 0)
-			printf("Sensor: can't create thread.");
-		p2_wait = 1;
+		if (rtc_alarm_isActive(&wind_avg) == 0) {
+			memset(&wind_avg, 0, sizeof(struct rtc_alarm_dev));
+			wind_avg.func = sensor_sample_windAvg;
+			wind_avg.repeat = 1;
+			wind_avg.interval = 60 * 60;
+			now = rtc_get_time();
+			tm = localtime(&now);
+			printf("WindAverage: Now, %s", asctime(tm));
+			tm->tm_min = 50;
+			tm->tm_sec = 0;
+			if (now < mktime(tm))
+				expect = mktime(tm);
+			else
+				expect = mktime(tm) + 60 * 60;
+			wind_avg.expect = expect;
+			tm = localtime(&expect);
+			printf("WindAverage: Expect, %s", asctime(tm));
+
+			rtc_alarm_add(&wind_avg);
+			rtc_alarm_update();
+		}
+		if ((rtc_alarm_isActive(&wind_sec) == 0) && ((flag & 0x0002) != 0)) {
+			memset(&wind_sec, 0, sizeof(struct rtc_alarm_dev));
+			wind_sec.func = sensor_sample_windSec;
+			wind_sec.repeat = 1;
+			wind_sec.interval = 2 * 60;
+			now = rtc_get_time();
+			tm = localtime(&now);
+			printf("WindSpeed: Now, %s", asctime(tm));
+			expect = now - tm->tm_sec - (tm->tm_min % 10) * 60;
+			expect += 10 * 60;
+			wind_sec.expect = expect;
+			tm = localtime(&expect);
+			printf("WindSpeed: Expect, %s", asctime(tm));
+
+			rtc_alarm_add(&wind_sec);
+			rtc_alarm_update();
+		}
 	}
 
 	if (p1_wait) {
 		ret = pthread_join(p1, NULL);
 		if (ret != 0)
-			printf("CMD: can't join with thread.");
-	}
-	if (p2_wait) {
-		ret = pthread_join(p2, NULL);
-		if (ret != 0)
-			printf("CMD: can't join with thread.");
+			printf("CMD: can't join with p1 thread.");
 	}
 
-	printf("Sample Qixiang Data: \n");
-	if ((flag & 0x1) == 0x01) {
-		printf("温 度： %d \n", s_data.Air_Temperature);
-		printf("湿 度： %d \n", s_data.Humidity);
-		printf("大气压： %d \n", s_data.Air_Pressure);
-	}
-	if ((flag & 0x10) == 0x10) {
-		printf("光辐射： %d \n", s_data.Radiation_Intensity);
-	}
-	if (flag & 0x08) {
-		printf("降雨量： %d \n", s_data.Precipitation);
-		printf("降水强度： %d \n", s_data.Precipitation_Intensity);
-	}
-	if ((flag & 0x0002) != 0) {
+	ret = pthread_join(p2, NULL);
+	if (ret != 0)
+		printf("CMD: can't join with p2 thread.");
+
+	data_qixiang_flag = 1;
+	if (data_qixiang_flag) {
+		get_wind_data(&s_data);
+		record_len = sizeof(struct record_qixiang);
+		if (File_AppendRecord(RECORD_FILE_QIXIANG, (char *)&record, record_len) < 0) {
+			printf("CMD: Recording Qixiang data error.\n");
+		}
+
+		printf("Sample Qixiang Data: \n");
 		printf("平均风速： %d \n", s_data.Average_WindSpeed_10min);
+		printf("平均风向： %d \n", s_data.Average_WindDirection_10min);
 		printf("极大风速： %d \n", s_data.Extreme_WindSpeed);
 		printf("最大风速： %d \n", s_data.Max_WindSpeed);
 		printf("标准风速： %d \n", s_data.Standard_WindSpeed);
-	}
-	if ((flag & 0x0004) != 0) {
-		printf("平均风向： %d \n", s_data.Average_WindDirection_10min);
-	}
-
-	return ret;
-}
-
-int Sensor_GetData_QiXiang(Data_qixiang_t *data)
-{
-	int Clocktime_Stamp = time((time_t*)NULL);
-	int has_data = 0;
-	byte buf[64];
-	int ret = 0;
-	int flag;
-
-	flag = Sensor_Detect_Qixiang();
-	printf("Sensor exist flag = 0x%x \n", flag);
-
-	/* Get temperature */
-	memset(buf, 0, 64);
-	if (Sensor_Can_ReadData(Sensor_CAN_List_Qixiang[0].addr, buf) == 0) {
-		has_data = 1;
-		data->Air_Temperature = (buf[6] << 8) | buf[7];
-		data->Humidity = (buf[8] << 8) | buf[9];
-		data->Air_Pressure = (buf[10] << 8) | buf[11];
-		if (buf[18] == 1)
-			data->Alerm_Flag |= 0x00e0;
+		printf("温 度： %d \n", s_data.Air_Temperature);
+		printf("湿 度： %d \n", s_data.Humidity);
+		printf("大气压： %d \n", s_data.Air_Pressure);
+		printf("降雨量： %d \n", s_data.Precipitation);
+		printf("降水强度： %d \n", s_data.Precipitation_Intensity);
+		printf("光辐射： %d \n", s_data.Radiation_Intensity);
 	}
 
-	/* Get Rainfall data */
-	memset(buf, 0, 64);
-	if (Sensor_Can_ReadData(Sensor_CAN_List_Qixiang[3].addr, buf) == 0) {
-		has_data = 1;
-		data->Precipitation = (buf[6] << 8) | buf[7];
-		if (buf[18] == 1)
-			data->Alerm_Flag |= 0x0100;
-	}
-
-	/* Get Radiation Intensity data */
-	memset(buf, 0, 64);
-	if (Sensor_Can_ReadData(Sensor_CAN_List_Qixiang[4].addr, buf) == 0) {
-		has_data = 1;
-		data->Radiation_Intensity = (buf[6] << 8) | buf[7];
-		if (buf[18] == 1)
-			data->Alerm_Flag |= 0x0400;
-	}
-
-	data->Time_Stamp = Clocktime_Stamp;
-	if (has_data != 1)
-		ret = -1;
+	printf("CMD: sample Weather data finished.\n");
 
 	return ret;
 }
@@ -369,7 +539,8 @@ int Sensor_GetData(byte *buf, int type)
 	case CMA_MSG_TYPE_DATA_QXENV:
 		{
 			Data_qixiang_t *data = (Data_qixiang_t *)sensor_buf;
-			ret = Sensor_GetData_QiXiang(data);
+			ret = Sensor_Sample_Qixiang();
+			memcpy(&data, &s_data, sizeof(Data_qixiang_t));
 			memcpy(buf, &data, sizeof(Data_qixiang_t));
 		}
 		break;
@@ -580,8 +751,12 @@ int Sensor_Can_ReadData(usint addr, byte *buf)
 	debug_out(cmd, 8);
 #endif
 
-	if ((s = can_socket_init(CAN_DEVICE_NAME)) < 0)
+	pthread_mutex_lock(&can_mutex);
+
+	if ((s = can_socket_init(CAN_DEVICE_NAME)) < 0) {
+		pthread_mutex_unlock(&can_mutex);
 		return -1;
+	}
 
 	memcpy(frame.data, cmd, 8);
 	frame.can_dlc = 8;
@@ -591,16 +766,14 @@ int Sensor_Can_ReadData(usint addr, byte *buf)
 	ret = write(s, &frame, sizeof(frame));
 	if (ret == -1) {
 		perror("write");
-		close(s);
-		return -1;
+		goto err;
 	}
 
 	pbuf = buf;
 	for (i = 0; i < 3; i++) {
 		if ((ret = io_readn(s, &frame, sizeof(struct can_frame), timeout)) < 0) {
 			perror("read");
-			close(s);
-			return -1;
+			goto err;
 		}
 		memcpy(pbuf, frame.data, frame.can_dlc);
 		pbuf += frame.can_dlc;
@@ -618,12 +791,16 @@ int Sensor_Can_ReadData(usint addr, byte *buf)
 //	printf("crc16 = %x \n", crc16);
 	if (crc16 != ((buf[19] << 8) | buf[20])) {
 		printf("CRC check Error.\n");
-		close(s);
-		return -1;
+		goto err;
 	}
 
 	close(s);
 	return 0;
+
+err:
+	pthread_mutex_unlock(&can_mutex);
+	close(s);
+	return -1;
 }
 
 int Sensor_Can_Config(usint addr, usint t)

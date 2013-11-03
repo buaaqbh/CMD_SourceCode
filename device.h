@@ -55,10 +55,16 @@ extern int Device_get_basic_info(status_basic_info_t *dev);
 extern int Device_get_working_status(status_working_t *status);
 extern int Device_getNet_info(Ctl_net_adap_t  *adap);
 extern int Device_setNet_info(Ctl_net_adap_t  *adap);
-extern int Device_getId(byte *id, byte *org_id);
-extern int Device_setId(byte *id, byte *org_id);
-extern int Device_reset(byte type);
+extern int Device_getId(byte *id, usint *org_id);
+extern int Device_setId(byte *cmd_id, byte *c_id, usint org_id);
+extern int Device_getServerInfo(Ctl_up_device_t  *up_device);
+extern int Device_setServerInfo(Ctl_up_device_t  *up_device);
+extern int Device_reset(usint type);
 extern int Device_setWakeup_time(int revival_time, usint revival_cycle, usint duration_time);
+extern int Device_getSampling_Cycle(char *entry);
+extern int Device_setSampling_Cycle(char *entry, int value);
+extern int Device_GetAlarm_Threshold(byte type, byte *buf, byte *num);
+extern int Device_SetAlarm_Threshold(byte type, byte *buf, byte num);
 
 #ifdef __cplusplus
 } /* extern "C" */

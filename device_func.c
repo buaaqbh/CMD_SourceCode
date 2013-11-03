@@ -16,10 +16,13 @@
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include <libsocketcan.h>
+#include <iconv.h>
 #include "types.h"
 #include "device.h"
 #include "iniparser.h"
 #include "dictionary.h"
+#include "rtc_alarm.h"
+#include "file_ops.h"
 
 env_data_t CMA_Env_Parameter;
 
@@ -27,7 +30,7 @@ int Device_Env_init(void)
 {
 	dictionary  *ini;
 	char *id;
-	char *destip;
+	char *destip, *domain;
 	int dest_port, local_port;
 	char *s_proto;
 
@@ -39,14 +42,21 @@ int Device_Env_init(void)
 			return -1 ;
 	}
 
-	id = iniparser_getstring(ini, "CMA:id", NULL);
+	id = iniparser_getstring(ini, "CMD:id", NULL);
 	if (strlen(id) != 17)
 		goto fail;
 	memcpy(CMA_Env_Parameter.id, id, 17);
 
+	id = iniparser_getstring(ini, "CMD:c_id", NULL);
+	if (strlen(id) == 17)
+		memcpy(CMA_Env_Parameter.c_id, id, 17);
+
+	CMA_Env_Parameter.org_id = iniparser_getint(ini, "CMD:org_id", 0);
+
 	CMA_Env_Parameter.l2_type = iniparser_getint(ini, "L2:type", 0);
 	destip = iniparser_getstring(ini, "CAG:ip", NULL);
 	dest_port = iniparser_getint(ini, "CAG:port", 0);
+	domain = iniparser_getstring(ini, "CAG:domain", NULL);
 	local_port = iniparser_getint(ini, "CAG:local_port", 0);
 	s_proto = iniparser_getstring(ini, "CAG:s_protocal", NULL);
 	if ((destip == NULL) || (dest_port == 0) || (local_port == 0) || (s_proto == NULL))
@@ -55,6 +65,8 @@ int Device_Env_init(void)
 	memcpy(CMA_Env_Parameter.cma_ip, destip, strlen(destip));
 	CMA_Env_Parameter.cma_port = dest_port;
 	CMA_Env_Parameter.local_port = local_port;
+	if (domain != NULL)
+		memcpy(CMA_Env_Parameter.cma_domain, domain, strlen(domain));
 	if (memcmp(s_proto, "udp", 3) == 0)
 		CMA_Env_Parameter.s_protocal = 0;
 	else if (memcmp(s_proto, "tcp", 3) == 0)
@@ -312,15 +324,76 @@ int Device_can_init(void)
 	return 0;
 }
 
+int code_convert(char *from_charset, char *to_charset, char *inbuf, int inlen, char *outbuf, int outlen)
+{
+	iconv_t cd;
+	char **pin = &inbuf;
+	char **pout = &outbuf;
+
+	cd = iconv_open(to_charset, from_charset);
+	if (cd == 0)
+		return -1;
+	memset(outbuf, 0, outlen);
+	if (iconv(cd, pin, (size_t *)&inlen, pout, (size_t *)&outlen) == -1)
+		return -1;
+	iconv_close(cd);
+	return 0;
+}
 
 int Device_get_basic_info(status_basic_info_t *dev)
 {
-	memcpy(dev->SmartEquip_Name, "jiance", 6);
-	memcpy(dev->Model, "SY0503", 6);
-	memcpy(dev->Essential_Info_Version, "1.01", 4);
-	memcpy(dev->Bs_Manufacturer, "buaaa", 5);
-	memcpy(dev->Bs_Identifier, "12345678", 8);
+	dictionary  *ini;
+	char *str = NULL;
+	struct tm tm;
 
+	ini = iniparser_load(config_file);
+    if (ini==NULL) {
+        fprintf(stderr, "cannot parse file: %s\n", config_file);
+        return -1 ;
+    }
+
+    str = iniparser_getstring(ini, "device:name", NULL);
+    if (str != NULL) {
+//    	memcpy(dev->SmartEquip_Name, str, strlen(str));
+    	code_convert("utf-8", "gb2312", str, strlen(str), (char *)dev->SmartEquip_Name, 50);
+//    	printf("str = %s, gbk = %s\n", str, dev->SmartEquip_Name);
+    }
+
+    str = iniparser_getstring(ini, "device:model", NULL);
+    if (str != NULL) {
+//    	memcpy(dev->Model, str, strlen(str));
+    	code_convert("utf-8", "gb2312", str, strlen(str), (char *)dev->Model, 10);
+    }
+
+    str = iniparser_getstring(ini, "device:version", NULL);
+    if (str != NULL) {
+//    	memcpy(dev->Essential_Info_Version, str, strlen(str));
+    	code_convert("utf-8", "gb2312", str, strlen(str), (char *)dev->Essential_Info_Version, 4);
+    }
+
+    str = iniparser_getstring(ini, "device:manufacturer", NULL);
+    if (str != NULL) {
+//    	memcpy(dev->Bs_Manufacturer, str, strlen(str));
+    	code_convert("utf-8", "gb2312", str, strlen(str), (char *)dev->Bs_Manufacturer, 50);
+    }
+
+    str = iniparser_getstring(ini, "device:bsid", NULL);
+    if (str != NULL) {
+//    	memcpy(dev->Bs_Identifier, str, strlen(str));
+    	code_convert("utf-8", "gb2312", str, strlen(str), (char *)dev->Bs_Identifier, 20);
+    }
+
+    str = iniparser_getstring(ini, "device:date", NULL);
+    if (str != NULL) {
+    	memset(&tm, 0, sizeof(struct tm));
+    	tm.tm_year = (str[0]-'0')*1000 + (str[1]-'0')*100 + (str[2]-'0')*10 + (str[3]-'0') - 1900;
+    	tm.tm_mon = (str[4]-'0')*10 + (str[5]-'0') - 1;
+    	tm.tm_mday = (str[6]-'0')*10 + (str[7]-'0');
+    	dev->Bs_Production_Date = mktime(&tm);
+//    	printf("Date: %s, 0x%x\n", ctime(&dev->Bs_Production_Date), dev->Bs_Production_Date);
+    }
+
+	iniparser_freedict(ini);
 	return 0;
 }
 
@@ -382,7 +455,7 @@ static int get_dns(char *dns)
         close(fd);
         return -1;
     }
-    strBuf[buf_size] = '\0';
+    strBuf[buf_size - 1] = '\0';
     close(fd);
 
 //	printf("strBuf: %s\n", strBuf);
@@ -405,6 +478,7 @@ static int get_dns(char *dns)
 
 			memcpy(dns, p, count);
 			dns[count]='\0';
+			break;
         }
         else {
             i++;
@@ -422,11 +496,11 @@ int Device_getNet_info(Ctl_net_adap_t  *adap)
     struct ifreq ifr;
     unsigned long gateway;
     char dns[32];
-    char *net_dev = "wlan0";
+    char *net_dev = "eth0";
 
     get_gateway(net_dev, &gateway);
     get_dns(dns);
-//   printf("Dns: %s \n", dns);
+    printf("Dns: %s \n", dns);
     inet_aton(dns, &sin.sin_addr);
 
     adap->Gateway = gateway;
@@ -470,28 +544,239 @@ int Device_setNet_info(Ctl_net_adap_t  *adap)
 	return 0;
 }
 
-int Device_getId(byte *id, byte *org_id)
+int Device_getId(byte *id, usint *org_id)
 {
 	if ((id == NULL) || (org_id == NULL))
 		return -1;
 
+	memcpy(id, CMA_Env_Parameter.c_id, 17);
+	*org_id = CMA_Env_Parameter.org_id;
+
 	return 0;
 }
 
-int Device_setId(byte *id, byte *org_id)
+int Device_setId(byte *cmd_id, byte *c_id, usint org_id)
 {
-	if ((id == NULL) || (org_id == NULL))
+	dictionary  *ini;
+	char buf[32];
+	FILE *save;
+
+	if ((cmd_id == NULL) || (c_id == NULL))
 		return -1;
 
+	ini = iniparser_load(config_file);
+	if (ini==NULL) {
+		fprintf(stderr, "cannot parse file: %s\n", config_file);
+			return -1 ;
+	}
+
+	memset(buf, 0, 32);
+	sprintf(buf, "%d", org_id);
+	iniparser_set(ini, "CMD:id", (char *)cmd_id);
+	iniparser_set(ini, "CMD:c_id", (char *)c_id);
+	iniparser_set(ini, "CMD:org_id", buf);
+
+	if ((save = fopen(config_file, "w")) == NULL) {
+		iniparser_freedict(ini);
+		return -1;
+	}
+	iniparser_dump_ini(ini, save);
+	fclose(save);
+
+	memcpy(CMA_Env_Parameter.id, cmd_id, 17);
+	memcpy(CMA_Env_Parameter.c_id, c_id, 17);
+	CMA_Env_Parameter.org_id = org_id;
+
+	iniparser_freedict(ini);
 	return 0;
 }
 
-int Device_reset(byte type)
+int Device_getServerInfo(Ctl_up_device_t  *up_device)
 {
+	if ((up_device == NULL))
+		return -1;
+
+	up_device->IP_Address = inet_addr(CMA_Env_Parameter.cma_ip);
+	up_device->Port = CMA_Env_Parameter.cma_port;
+	memcpy(up_device->Domain_Name, CMA_Env_Parameter.cma_domain, 64);
+
+	return 0;
+}
+
+int Device_setServerInfo(Ctl_up_device_t  *up_device)
+{
+	dictionary  *ini;
+	char buf[32];
+	FILE *save;
+	struct in_addr addr;
+
+	if ((up_device == NULL))
+		return -1;
+
+	addr.s_addr = up_device->IP_Address;
+	printf("Set: ip = %s, port = %d, domain = %s\n", inet_ntoa(addr), up_device->Port, up_device->Domain_Name);
+	ini = iniparser_load(config_file);
+	if (ini==NULL) {
+		fprintf(stderr, "cannot parse file: %s\n", config_file);
+			return -1 ;
+	}
+
+	memset(buf, 0, 32);
+	sprintf(buf, "%d", up_device->Port);
+	iniparser_set(ini, "CAG:ip", inet_ntoa(addr));
+	iniparser_set(ini, "CAG:domain", (char *)up_device->Domain_Name);
+	iniparser_set(ini, "CAG:port", buf);
+
+	if ((save = fopen(config_file, "w")) == NULL) {
+		iniparser_freedict(ini);
+		return -1;
+	}
+	iniparser_dump_ini(ini, save);
+	fclose(save);
+
+	memcpy(CMA_Env_Parameter.cma_ip, inet_ntoa(addr), 17);
+	memcpy(CMA_Env_Parameter.cma_domain, up_device->Domain_Name, 64);
+	CMA_Env_Parameter.cma_port = up_device->Port;
+
+	iniparser_freedict(ini);
+
+	return 0;
+}
+
+int Device_reset(usint type)
+{
+	fprintf(stdout, "Device Reboot, type = %d \n", type);
+//	system("/sbin/reboot");
 	return 0;
 }
 
 int Device_setWakeup_time(int revival_time, usint revival_cycle, usint duration_time)
 {
+	fprintf(stdout, "revival time = %d, cycle = %ds, druation = %ds\n",
+			revival_time, revival_cycle, duration_time);
+	fprintf(stdout, "%s\n", ctime((time_t *)&revival_time));
+
+	return 0;
+}
+
+int Device_getSampling_Cycle(char *entry)
+{
+	dictionary  *ini;
+	int cycle = 0;
+
+	ini = iniparser_load(config_file);
+	if (ini==NULL) {
+		fprintf(stderr, "cannot parse file: %s\n", config_file);
+			return -1 ;
+	}
+
+	cycle = iniparser_getint(ini, entry, 10);
+
+	iniparser_freedict(ini);
+
+	return cycle;
+}
+
+int Device_setSampling_Cycle(char *entry, int value)
+{
+	dictionary  *ini;
+	int cycle = 0;
+	char buf[32];
+	FILE    *save;
+
+	if (value <= 0) {
+		fprintf(stderr, "CMD: Invalid cycle value.\n");
+		return -1;
+	}
+
+	ini = iniparser_load(config_file);
+	if (ini==NULL) {
+		fprintf(stderr, "cannot parse file: %s\n", config_file);
+			return -1 ;
+	}
+
+	cycle = iniparser_getint(ini, entry, 10);
+	if (value == cycle)
+		goto out;
+
+	memset(buf, 0, 32);
+	sprintf(buf, "%d", value);
+	iniparser_set(ini, entry, buf);
+
+	if ((save = fopen(config_file, "w")) == NULL) {
+		iniparser_freedict(ini);
+		return -1;
+	}
+	iniparser_dump_ini(ini, save);
+	fclose(save);
+
+	sample_dev.interval = value * 60;
+//	printf("Device func: %d, 0x%08x\n", sample_dev.interval, (unsigned int)&sample_dev);
+
+out:
+	iniparser_freedict(ini);
+	return cycle;
+}
+
+#define  FILE_ALARM_PAR     ".sensor_alarm_par.cfg"
+
+int Device_GetAlarm_Threshold(byte type, byte *buf, byte *num)
+{
+	int i;
+	int total = 0;
+	int record_len = sizeof(alarm_value_t);
+	alarm_value_t record;
+
+	*num = 0;
+	total = File_GetNumberOfRecords(FILE_ALARM_PAR, record_len);
+	if (total == 0) {
+		return 0;
+	}
+
+	for (i = 0; i < total; i++) {
+		memset(&record, 0, record_len);
+		if (File_GetRecordByIndex(FILE_ALARM_PAR, &record, record_len, i) == record_len) {
+			if (record.type == type) {
+				memcpy((buf + *num * 10), record.alarm_par, 10);
+				*num += 1;
+			}
+		}
+
+	}
+
+	return *num;
+}
+
+int Device_SetAlarm_Threshold(byte type, byte *buf, byte num)
+{
+	int i, j;
+	int total = 0;
+	int record_len = sizeof(alarm_value_t);
+	alarm_value_t record;
+	byte *p = NULL;
+
+	total = File_GetNumberOfRecords(FILE_ALARM_PAR, record_len);
+
+	printf("type = 0x%x, num = %d\n", type, num);
+
+	for (j = 0; j < num; j++) {
+		p = buf + j * 10;
+		for (i = 0; i < total; i++) {
+			memset(&record, 0, record_len);
+			if (File_GetRecordByIndex(FILE_ALARM_PAR, &record, record_len, i) == record_len) {
+				if ((record.type == type) && (memcmp(record.alarm_par, p, 6) == 0)) {
+					memcpy(&record.alarm_value, p + 6, 4);
+					File_UpdateRecordByIndex(FILE_ALARM_PAR, &record, record_len, i);
+					break;
+				}
+			}
+		}
+		if (i == total) {
+			record.type = type;
+			memcpy(&record.alarm_par, p, 10);
+			File_AppendRecord(FILE_ALARM_PAR, &record, record_len);
+		}
+	}
+
 	return 0;
 }

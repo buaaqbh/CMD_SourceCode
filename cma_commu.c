@@ -11,6 +11,8 @@
 #include "types.h"
 #include "socket_lib.h"
 #include "sensor_ops.h"
+#include "rtc_alarm.h"
+#include "file_ops.h"
 
 #define _DEBUG
 
@@ -167,89 +169,98 @@ int Commu_SendPacket(int fd, frame_head_t *head, byte *data)
 int CMA_Server_Process(int fd, byte *rbuf)
 {
 	frame_head_t *f_head = (frame_head_t *)rbuf;
-//	byte frame_type = f_head->frame_type;
+	byte frame_type = f_head->frame_type;
 	byte msg_type = f_head->msg_type;
 	int ret = 0;
 
 	printf("Enter func: %s \n", __func__);
-	switch (msg_type) {
-	case CMA_MSG_TYPE_CTL_TIME_CS:
-		if (CMA_Time_SetReq_Response(fd, rbuf) < 0)
+	if (memcmp(f_head->id, CMA_Env_Parameter.id, 17) != 0) {
+		fprintf(stderr, "Device ID: %s, MSG ID: %s, Miss Match.\n", f_head->id, CMA_Env_Parameter.id);
+		return -1;
+	}
+
+	if (frame_type == CMA_FRAME_TYPE_CONTROL) {
+		switch (msg_type) {
+		case CMA_MSG_TYPE_CTL_TIME_CS:
+			if (CMA_Time_SetReq_Response(fd, rbuf) < 0)
+				ret = -1;
+			break;
+		case CMA_MSG_TYPE_CTL_CY_PAR:
+			if (CMA_SamplePar_SetReq_Response(fd, rbuf) < 0)
+				ret = -1;
+			break;
+		case CMA_MSG_TYPE_CTL_TIME_AD:
+			if (CMA_NetAdapter_SetReq_Response(fd, rbuf) < 0)
+				ret = -1;
+			break;
+		case CMA_MSG_TYPE_CTL_MODEL_PAR:
+			if (CMA_ModelPar_SetReq_Response(fd, rbuf) < 0)
+				ret = -1;
+			break;
+		case CMA_MSG_TYPE_CTL_ALARM:
+			if (CMA_Alarm_SetReq_Response(fd, rbuf) < 0)
+				ret = -1;
+			break;
+		case CMA_MSG_TYPE_CTL_TOCMA_INFO:
+			if (CMA_UpDevice_SetReq_Response(fd, rbuf) < 0)
+				ret = -1;
+			break;
+		case CMA_MSG_TYPE_CTL_DEV_ID:
+			if (CMA_DeviceId_SetReq_Response(fd, rbuf) < 0)
+				ret = -1;
+			break;
+		case CMA_MSG_TYPE_CTL_BASIC_INFO:
+			if (CMA_BasicInfo_SetReq_Response(fd, rbuf) < 0)
+				ret = -1;
+			break;
+		case CMA_MSG_TYPE_CTL_DEV_RESET:
+			if (CMA_DeviceRset_Response(fd, rbuf) < 0)
+				ret = -1;
+			break;
+		case CMA_MSG_TYPE_CTL_REQ_DATA:
+			if (CMA_RequestData_Response(fd, rbuf) < 0)
+				ret = -1;
+			break;
+		case CMA_MSG_TYPE_IMAGE_VIDEO_SET:
+			if (CMA_Video_StopStart_Response(fd, rbuf) < 0)
+				ret = -1;
+			break;
+		case CMA_MSG_TYPE_IMAGE_CAP_MANUAL:
+			if (CMA_ManualCapture_Response(fd, rbuf) < 0)
+				ret = -1;
+			break;
+		case CMA_MSG_TYPE_IMAGE_CAP_TIME:
+			if (CMA_CaptureTimetable_Response(fd, rbuf) < 0)
+				ret = -1;
+			break;
+		case CMA_MSG_TYPE_IMAGE_CAP_PAR:
+			if (CMA_SetImagePar_Response(fd, rbuf) < 0)
+				ret = -1;
+			break;
+		case CMA_MSG_TYPE_IMAGE_CAM_ADJ:
+			if (CMA_CameraControl_Response(fd, rbuf) < 0)
+				ret = -1;
+			break;
+		case CMA_MSG_TYPE_CTL_UPGRADE_DATA:
+			if (CMA_SoftWare_Update_Response(fd, rbuf) < 0)
+				ret = -1;
+			break;
+		default:
 			ret = -1;
-		break;
-	case CMA_MSG_TYPE_CTL_CY_PAR:
-		if (CMA_SamplePar_SetReq_Response(fd, rbuf) < 0)
-			ret = -1;
-		break;
-	case CMA_MSG_TYPE_CTL_TIME_AD:
-		if (CMA_NetAdapter_SetReq_Response(fd, rbuf) < 0)
-			ret = -1;
-		break;
-	case CMA_MSG_TYPE_CTL_MODEL_PAR:
-		if (CMA_ModelPar_SetReq_Response(fd, rbuf) < 0)
-			ret = -1;
-		break;
-	case CMA_MSG_TYPE_CTL_ALARM:
-		if (CMA_Alarm_SetReq_Response(fd, rbuf) < 0)
-			ret = -1;
-		break;
-	case CMA_MSG_TYPE_CTL_TOCMA_INFO:
-		if (CMA_UpDevice_SetReq_Response(fd, rbuf) < 0)
-			ret = -1;
-		break;
-	case CMA_MSG_TYPE_CTL_DEV_ID:
-		if (CMA_DeviceId_SetReq_Response(fd, rbuf) < 0)
-			ret = -1;
-		break;
-	case CMA_MSG_TYPE_CTL_BASIC_INFO:
-		if (CMA_BasicInfo_SetReq_Response(fd, rbuf) < 0)
-			ret = -1;
-		break;
-	case CMA_MSG_TYPE_CTL_DEV_RESET:
-		if (CMA_DeviceRset_Response(fd, rbuf) < 0)
-			ret = -1;
-		break;
-	case CMA_MSG_TYPE_CTL_REQ_DATA:
-		if (CMA_RequestData_Response(fd, rbuf) < 0)
-			ret = -1;
-		break;
-	case CMA_MSG_TYPE_IMAGE_VIDEO_SET:
-		if (CMA_Video_StopStart_Response(fd, rbuf) < 0)
-			ret = -1;
-		break;
-	case CMA_MSG_TYPE_IMAGE_CAP_MANUAL:
-		if (CMA_ManualCapture_Response(fd, rbuf) < 0)
-			ret = -1;
-		break;
-	case CMA_MSG_TYPE_IMAGE_CAP_TIME:
-		if (CMA_CaptureTimetable_Response(fd, rbuf) < 0)
-			ret = -1;
-		break;
-	case CMA_MSG_TYPE_IMAGE_CAP_PAR:
-		if (CMA_SetImagePar_Response(fd, rbuf) < 0)
-			ret = -1;
-		break;
-	case CMA_MSG_TYPE_IMAGE_CAM_ADJ:
-		if (CMA_CameraControl_Response(fd, rbuf) < 0)
-			ret = -1;
-		break;
-	case CMA_MSG_TYPE_CTL_UPGRADE_DATA:
-		if (CMA_SoftWare_Update_Response(fd, rbuf) < 0)
-			ret = -1;
-		break;
-	default:
-		ret = -1;
-		printf("CMA: Invalid MSG type.\n");
+			printf("CMA: Invalid MSG type.\n");
+		}
 	}
 
 	return ret;
 }
 
-int CMA_Send_SensorData(int fd, int type)
+int CMA_Send_SensorData(int fd, int type, void *data)
 {
 	char *id = CMA_Env_Parameter.id;
 	frame_head_t f_head;
 	byte data_buf[MAX_DATA_BUFSIZE];
+	byte rbuf[MAX_COMBUF_SIZE];
+	int ret;
 
 	printf("CMA Send Sensor Data.\n");
 	memset(&f_head, 0, sizeof(frame_head_t));
@@ -258,12 +269,12 @@ int CMA_Send_SensorData(int fd, int type)
 	f_head.frame_type = CMA_FRAME_TYPE_DATA;
 	memcpy(f_head.id, id, 17);
 	memset(data_buf, 0, MAX_DATA_BUFSIZE);
-	
-	f_head.msg_type = type;
 
 	switch (type) {
 	case CMA_MSG_TYPE_DATA_QXENV:
+	case CMA_MSG_TYPE_CTL_QX_PAR:
 		f_head.pack_len = sizeof(Data_qixiang_t);
+		f_head.msg_type = CMA_MSG_TYPE_DATA_QXENV;
 		break;
 	case CMA_MSG_TYPE_DATA_TGQXIE:
 		f_head.pack_len = sizeof(Data_incline_t);
@@ -300,13 +311,16 @@ int CMA_Send_SensorData(int fd, int type)
 		break;
 	}
 	
-	if (Sensor_GetData(data_buf, type) < 0) {
-		printf("Get Sensor data error.\n");
-		return -1;
-	}
+//	if (Sensor_GetData(data_buf, type) < 0) {
+//		printf("Get Sensor data error.\n");
+//		return -1;
+//	}
 
-	if (Commu_SendPacket(fd, &f_head, data_buf) < 0)
+	if (Commu_SendPacket(fd, &f_head, (byte *)data) < 0)
 		return -1;
+
+	memset(rbuf, 0, MAX_DATA_BUFSIZE);
+	ret = Commu_GetPacket(fd, rbuf, MAX_COMBUF_SIZE);
 
 	return 0;
 }
@@ -315,7 +329,7 @@ int CMA_Time_SetReq_Response(int fd, byte *rbuf)
 {
 	frame_head_t *p_head = (frame_head_t *)rbuf;
 	byte  config_type = *(rbuf + sizeof(frame_head_t));
-	int  cur_time;
+	time_t  cur_time;
 	int Clocktime_Stamp;
 	byte sbuf[MAX_DATA_BUFSIZE];
 	struct timeval tv;
@@ -325,12 +339,15 @@ int CMA_Time_SetReq_Response(int fd, byte *rbuf)
 	
 	if (config_type == 0x01) {
 		gettimeofday (&tv , &tz);
-		tv.tv_sec = cur_time;
+//		printf("Now time: %d, %s \n", (int)tv.tv_sec, asctime(gmtime(&tv.tv_sec)));
+		tv.tv_sec = mktime(gmtime(&cur_time));
+//		printf("Set time: %d, %s \n", (int)tv.tv_sec, asctime(gmtime(&cur_time)));
 		if (settimeofday(&tv, &tz) < 0)
 			printf("CMA: Set time error.\n");
 	}
 	
-	Clocktime_Stamp = time((time_t*)NULL);
+	cur_time = time((time_t*)NULL);
+	Clocktime_Stamp = mktime_k(localtime(&cur_time));
 	p_head->frame_type = CMA_FRAME_TYPE_CONTROL_RES;
 	p_head->pack_len = 5;
 	
@@ -382,12 +399,19 @@ int CMA_RequestData_Response(int fd, byte *rbuf)
 	byte sbuf[MAX_DATA_BUFSIZE];
 	int time_start = 0, time_end = 0;
 	
+	struct record_qixiang record;
+	int total = 0;
+	int record_len = sizeof(struct record_qixiang);
+	int i;
+
 	memset(sbuf, 0, MAX_DATA_BUFSIZE);
 	sbuf[0] = 0xff;
 	
 	req_type = *(rbuf + sizeof(frame_head_t));
 	memcpy(&time_start, (rbuf + sizeof(frame_head_t) + 1), sizeof(int));
 	memcpy(&time_end, (rbuf + sizeof(frame_head_t) + 1 + sizeof(int)), sizeof(int));
+	fprintf(stdout, "Request Data from: %s", ctime((time_t *)&time_start));
+	fprintf(stdout, "to: %s", ctime((time_t *)&time_end));
 	
 	/*
 	 *    Response Process
@@ -402,6 +426,18 @@ int CMA_RequestData_Response(int fd, byte *rbuf)
 	if (Commu_SendPacket(fd, p_head, sbuf) < 0)
 		return -1;
 
+	total = File_GetNumberOfRecords(RECORD_FILE_QIXIANG, record_len);
+	if (total == 0) {
+		return 0;
+	}
+//	for (i = 0; i < total; i++) {
+	i = 0;
+		memset(&record, 0, sizeof(struct record_qixiang));
+		if (File_GetRecordByIndex(RECORD_FILE_QIXIANG, &record, record_len, i) == record_len) {
+			CMA_Send_SensorData(fd, req_type, &record.data);
+		}
+//	}
+
 	return 0;
 }
 
@@ -411,6 +447,7 @@ int CMA_SamplePar_SetReq_Response(int fd, byte *rbuf)
 	Ctl_sample_par_t  *sample_par = (Ctl_sample_par_t  *)(rbuf + sizeof(frame_head_t) + 1);
 	byte sbuf[MAX_DATA_BUFSIZE];
 	byte  set_type = *(rbuf + sizeof(frame_head_t));
+	usint cycle = 0;
 
 	printf("Enter func: %s\n", __func__);
 
@@ -418,10 +455,30 @@ int CMA_SamplePar_SetReq_Response(int fd, byte *rbuf)
 	sbuf[0] = 0xff;
 
 	if (set_type == 0x00) {
-		; /* Get Sample Parameter from Sensor */
+		 /* Get Sample Parameter from Sensor */
+		switch (sample_par->Request_Type) {
+		case CMA_MSG_TYPE_CTL_QX_PAR:
+			cycle = Device_getSampling_Cycle("qixiang:samp_period");
+			if (cycle > 0)
+				sample_par->Main_Time = cycle;
+			break;
+		default:
+			sbuf[0] = 0x00;
+			return -1;
+		}
 	}
 	else if (set_type == 0x01) {
 		; /* Set Sample Parameter from Sensor */
+		switch (sample_par->Request_Type) {
+		case CMA_MSG_TYPE_CTL_QX_PAR:
+			cycle = sample_par->Main_Time;
+			if (cycle > 0)
+				Device_setSampling_Cycle("qixiang:samp_period", cycle);
+			break;
+		default:
+			sbuf[0] = 0x00;
+			return -1;
+		}
 	}
 	else
 		sbuf[0] = 0x00;
@@ -484,10 +541,13 @@ int CMA_Alarm_SetReq_Response(int fd, byte *rbuf)
 	sbuf[0] = 0xff;
 
 	if (set_type == 0x00) {
-		; /* Get Sensor Alarm Setting from Sensor, return config_num and Alarm value*/
+		/* Get Sensor Alarm Setting from Sensor, return config_num and Alarm value*/
+		Device_GetAlarm_Threshold(req_type, (sbuf + 3), &config_num);
+
 	}
 	else if (set_type == 0x01) {
 		; /* Set Alarm Value to Sensor */
+		Device_SetAlarm_Threshold(req_type, (rbuf + sizeof(frame_head_t) + 3), config_num);
 	}
 	else
 		sbuf[0] = 0x00;
@@ -497,7 +557,8 @@ int CMA_Alarm_SetReq_Response(int fd, byte *rbuf)
 
 	sbuf[1] = req_type;
 	sbuf[2] = config_num;
-//	memcpy((sbuf + 3), (rbuf + sizeof(frame_head_t) + 3), config_num * 10);
+	if (set_type == 0x01)
+		memcpy((sbuf + 3), (rbuf + sizeof(frame_head_t) + 3), config_num * 10);
 
 	if (Commu_SendPacket(fd, p_head, sbuf) < 0)
 		return -1;
@@ -517,10 +578,12 @@ int CMA_UpDevice_SetReq_Response(int fd, byte *rbuf)
 	sbuf[0] = 0xff;
 
 	if (set_type == 0x00) {
-		; /* Get up device info, ip addr and port */
+		/* Get up device info, ip addr and port */
+		if (Device_getServerInfo(up_device) < 0)
+			sbuf[0] = 0x00;
 	}
 	else if (set_type == 0x01) {
-		; /* Set up device info, ip addr and port */
+		Device_setServerInfo(up_device); /* Set up device info, ip addr and port */
 	}
 	else
 		sbuf[0] = 0x00;
@@ -549,7 +612,7 @@ int CMA_BasicInfo_SetReq_Response(int fd, byte *rbuf)
 	sbuf[0] = 0xff;
 
 	if (set_type == 0x00) {
-		; /* Get Sensor basic information */
+		/* Get Sensor basic information */
 	}
 	else if (set_type == 0x01) {
 		; /* Set Basic information to Sensor */
@@ -565,6 +628,13 @@ int CMA_BasicInfo_SetReq_Response(int fd, byte *rbuf)
 
 	if (Commu_SendPacket(fd, p_head, sbuf) < 0)
 		return -1;
+
+	if (msg_type == 0x01)
+		CMA_Send_BasicInfo(fd, CMA_Env_Parameter.id);
+	else if (msg_type == 0x02)
+		CMA_Send_WorkStatus(fd, CMA_Env_Parameter.id);
+	else
+		sbuf[0] = 0x00;
 
 	return 0;
 }
@@ -593,20 +663,26 @@ int CMA_DeviceId_SetReq_Response(int fd, byte *rbuf)
 	frame_head_t *p_head = (frame_head_t *)rbuf;
 	byte sbuf[MAX_DATA_BUFSIZE];
 	byte set_type = *(rbuf + sizeof(frame_head_t));
-	byte Component_ID[17];
-	byte Original_ID[2];
+	byte CMD_ID[18];
+	byte Component_ID[18];
+	usint Original_ID = 0;
 
+	memset(CMD_ID, 0, sizeof(CMD_ID));
+	memset(Component_ID, 0, sizeof(Component_ID));
+	memcpy(CMD_ID, p_head->id, 17);
 	memcpy(Component_ID, (rbuf + sizeof(frame_head_t) + 1), 17);
-	memcpy(Original_ID, (rbuf + sizeof(frame_head_t) + 18), 2);
+	memcpy(&Original_ID, (rbuf + sizeof(frame_head_t) + 18), 2);
 
 	memset(sbuf, 0, MAX_DATA_BUFSIZE);
 	sbuf[0] = 0xff;
 
 	if (set_type == 0x00) {
-		Device_getId(Component_ID, Original_ID); /* Get device ID */
+		Device_getId(Component_ID, &Original_ID); /* Get device ID */
+		memcpy(p_head->id, CMA_Env_Parameter.id, 17);
 	}
 	else if (set_type == 0x01) {
-		Device_setId(Component_ID, Original_ID);; /* Set device ID */
+		if (Device_setId(CMD_ID, Component_ID, Original_ID) < 0) /* Set device ID */
+			sbuf[0] = 0x00;
 	}
 	else
 		sbuf[0] = 0x00;
@@ -615,7 +691,7 @@ int CMA_DeviceId_SetReq_Response(int fd, byte *rbuf)
 	p_head->pack_len = 20;
 
 	memcpy((sbuf + 1), Component_ID, 17);
-	memcpy((sbuf + 18), Original_ID, 2);
+	memcpy((sbuf + 18), &Original_ID, 2);
 
 	if (Commu_SendPacket(fd, p_head, sbuf) < 0)
 		return -1;
@@ -627,20 +703,21 @@ int CMA_DeviceRset_Response(int fd, byte *rbuf)
 {
 	frame_head_t *p_head = (frame_head_t *)rbuf;
 	byte sbuf[MAX_DATA_BUFSIZE];
-	byte set_type = *(rbuf + sizeof(frame_head_t));
+	usint set_type = 0;
 
+	memcpy(&set_type, (rbuf + sizeof(frame_head_t)), 2);
 	memset(sbuf, 0, MAX_DATA_BUFSIZE);
 	sbuf[0] = 0xff;
-
-	if (Device_reset(set_type) < 0) {
-		sbuf[0] = 0x00;
-	}
 
 	p_head->frame_type = CMA_FRAME_TYPE_CONTROL_RES;
 	p_head->pack_len = 1;
 
 	if (Commu_SendPacket(fd, p_head, sbuf) < 0)
 		return -1;
+
+	if (Device_reset(set_type) < 0) {
+		sbuf[0] = 0x00;
+	}
 
 	return 0;
 }

@@ -21,6 +21,7 @@
 char *config_file = NULL;
 pthread_spinlock_t spinlock;
 volatile int System_Sleep_Enable = 0;
+struct rtc_alarm_dev sample_dev;
 
 static void usage(FILE * fp, int argc, char **argv)
 {
@@ -108,52 +109,36 @@ void udpServerThrFxn(void)
 	return;
 }
 
-void *main_sample_loop(void * arg)
+void *socket_server_func(void * arg)
 {
-	int cycle = 30;
-	printf("Enter func: %s \n", __func__);
-	while (1) {
-		/*
-		 *  Get Data from Sensor
-		 */
-//		system_sleep_enable(0);
-//		CMA_Send_SensorData(-1, CMA_MSG_TYPE_DATA_QXENV);
-//		Sensor_Sample_Qixiang();
-//		system_sleep_enable(1);
+	int s_socket;
 
-//		alarm(2);
-		sleep(30);
-//		printf("RTC timer: %d sec\n", cycle);
-/*
-		if (rtc_timer(cycle) < 0) {
-			printf("CMD: Rtc time error.\n");
-			alarm(0);
-			sleep(cycle);
-			continue;
+	if (CMA_Env_Parameter.s_protocal == 0) {
+		udpServerThrFxn();
+	}
+	else {
+		if ((s_socket = start_server(CMA_Env_Parameter.local_port, tcpServerThrFxn)) < 0) {
+			printf("Start Local Socket Server error.\n");
+			exit(-1);
 		}
-*/
+		close_socket(s_socket);
 	}
 
 	return 0;
 }
 
-void * rtc_alarm_func1(void *arg)
+void *main_sample_loop(void * arg)
 {
 	printf("Enter func: %s \n", __func__);
 
-	return 0;
-}
+	CMA_Send_HeartBeat(-1, CMA_Env_Parameter.id);
 
-void * rtc_alarm_func2(void *arg)
-{
-	printf("Enter func: %s \n", __func__);
+	system_sleep_enable(0);
+//	CMA_Send_SensorData(-1, CMA_MSG_TYPE_DATA_QXENV);
+	Sensor_Sample_Qixiang();
+	system_sleep_enable(1);
 
-	return 0;
-}
-
-void * rtc_alarm_func3(void *arg)
-{
-	printf("Enter func: %s \n", __func__);
+	alarm(2);
 
 	return 0;
 }
@@ -175,9 +160,11 @@ int main(int argc, char *argv[])
 {
 	int index, c;
 	int l2_type = 0;
-	pid_t pid;
-	int s_socket;
-	pthread_t pthread;
+	pthread_t pid_socket;
+	time_t now, expect;
+	int cycle;
+	struct tm *tm;
+	char *entry = NULL;
 	int ret;
 
 	config_file = CMA_CONFIG_FILE;
@@ -207,6 +194,8 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
+	rtc_alarm_init();
+
 	l2_type = CMA_Env_Parameter.l2_type;
 	printf("L2 type: %d\n", l2_type);
 	switch (l2_type) {
@@ -229,11 +218,14 @@ int main(int argc, char *argv[])
 		printf("Invalid L2 interface type.\n");
 	}
 
-	printf("Device ID: %s\n", CMA_Env_Parameter.id);
+	printf("Device ID: %s, Component ID: %s, Original ID: %d\n",
+			CMA_Env_Parameter.id, CMA_Env_Parameter.c_id, CMA_Env_Parameter.org_id);
 
 	if (Device_can_init() < 0) {
 //		return -1;
 	}
+
+	pthread_mutex_init(&can_mutex, NULL);
 
 	pthread_spin_init(&spinlock, 0);
 
@@ -242,67 +234,45 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-//	{
-		struct rtc_alarm_dev timer1, timer2, timer3;
-		time_t tm1;
-
-		rtc_alarm_init();
-
-		memset(&timer1, 0, sizeof(struct rtc_alarm_dev));
-		memset(&timer2, 0, sizeof(struct rtc_alarm_dev));
-		memset(&timer3, 0, sizeof(struct rtc_alarm_dev));
-		timer1.expect = rtc_get_time() + 20;
-		timer1.func = rtc_alarm_func1;
-		timer2.expect = rtc_get_time() + 10;
-		timer2.func = rtc_alarm_func2;
-		timer2.repeat = 1;
-		timer2.interval = 5;
-		timer3.expect = rtc_get_time() + 17;
-		timer3.func = rtc_alarm_func3;
-		timer3.repeat = 1;
-		timer3.interval = 7;
-
-		tm1 = rtc_get_time();
-		printf("Now: %d\n", tm1);
-		printf("Now: %s", asctime(localtime(&tm1)));
-
-		rtc_alarm_add(&timer1);
-		rtc_alarm_add(&timer2);
-		rtc_alarm_add(&timer3);
-		rtc_alarm_update();
-//	}
-
-
 	if (Zigbee_Device_Init() < 0) {
 		printf("Zigbee Device Init Error.\n");
 	}
 
-	pid = fork();
-	if(pid == -1) {
-		perror("fork error");
-		exit(EXIT_FAILURE);
-	}
-	if(pid == 0){
-		if (CMA_Env_Parameter.s_protocal == 0) {
-			udpServerThrFxn();
-		}
-		else {
-			if ((s_socket = start_server(CMA_Env_Parameter.local_port, tcpServerThrFxn)) < 0) {
-				printf("Start Local Socket Server error.\n");
-				return -1;
-			}
-			close_socket(s_socket);
-		}
-		exit(0);
+	ret = pthread_create(&pid_socket, NULL, socket_server_func, NULL);
+	if (ret != 0)
+		printf("Sensor: can't create thread.");
+
+	entry = "qixiang:samp_period";
+
+	/* Main Sampling data loop Timer Init */
+	if ((cycle = Device_getSampling_Cycle(entry)) < 0)
+			cycle = 10;
+	memset(&sample_dev, 0, sizeof(struct rtc_alarm_dev));
+	sample_dev.func = main_sample_loop;
+	sample_dev.repeat = 1;
+	sample_dev.interval = cycle * 60; /* Sampling Cycle */
+	now = rtc_get_time();
+	tm = localtime(&now);
+	printf("Now: %s", asctime(tm));
+	expect = now - tm->tm_sec - (tm->tm_min % 10) * 60;
+	expect += 10 * 60;
+	expect = now;
+	tm = localtime(&expect);
+	printf("Expect: %s", asctime(tm));
+	sample_dev.expect = expect;
+
+	rtc_alarm_add(&sample_dev);
+	rtc_alarm_update();
+
+	while (1) {
+		sleep(60);
+		if (rtc_alarm_isActive(&sample_dev))
+			printf("Main Sample rtc timer is atcive.\n");
 	}
 
-	ret = pthread_create(&pthread, NULL, main_sample_loop, NULL);
+	ret = pthread_join(pid_socket, NULL);
 	if (ret != 0)
-		printf("CMD: can't create thread.");
-
-	ret = pthread_join(pthread, NULL);
-	if (ret != 0)
-		printf("CMD: can't join with thread.");
+		printf("CMD: can't join with p2 thread.");
 
 	pthread_spin_destroy(&spinlock);
 

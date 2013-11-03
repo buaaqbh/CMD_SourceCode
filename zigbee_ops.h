@@ -27,4 +27,6 @@ int   Zigbee_Reset(int fd);
 int   Zigbee_Set_RouterAddr(int fd, usint addr);
 usint Zigbee_Read_RouterAddr(int fd);
 
+int Sensor_Zigbee_ReadData(byte *buf, int len);
+
 #endif /* ZIGBEE_OPS_H_ */

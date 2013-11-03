@@ -14,6 +14,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include "file_ops.h"
 
 static int get_file_size(const char *filename)
 {
@@ -27,7 +28,7 @@ static int get_file_size(const char *filename)
 int File_Open(const char *FileName)
 {
 	int fd;
-	fd = open(FileName, O_RDWR | O_CREAT);
+	fd = open(FileName, O_RDWR | O_CREAT, 0664);
 	if (fd == -1)
 		return -1;
 	return fd;
@@ -65,7 +66,7 @@ int File_GetNumberOfRecords(const char *FileName, int Record_Len)
 	int size;
 
 	size = get_file_size(FileName);
-	printf("File size = %d\n", size);
+//	printf("File size = %d\n", size);
 	if (size == 0)
 		return 0;
 
@@ -75,7 +76,7 @@ int File_GetNumberOfRecords(const char *FileName, int Record_Len)
 	return (size / Record_Len);
 }
 
-int File_AppendRecord(const char *FileName, char *Record, int Record_Len)
+int File_AppendRecord(const char *FileName, void *Record, int Record_Len)
 {
 	int fd;
 
@@ -167,6 +168,8 @@ int File_DeleteRecordByIndex(const char *FileName, int Record_Len, int Record_In
 	}
 
 	File_Close(fd);
+
+	truncate(FileName, (size - Record_Len));
 
 	return 0;
 }

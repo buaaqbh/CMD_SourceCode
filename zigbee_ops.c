@@ -47,13 +47,13 @@ int Zigbee_Get_Device(int speed)
 
 	fd = uart_open_dev(ZIGBEE_UART_NAME);
 	if (fd == -1) {
-		perror("serial port open errorn");
+		perror("serial port open error");
 		return -1;
 	}
 
 	uart_set_speed(fd, speed);
 	if(uart_set_parity(fd, 8, 1, 'N') == -1) {
-		printf ("Set Parity Errorn");
+		printf ("Set Parity Error");
 		return -1;
 	}
 
@@ -618,4 +618,40 @@ int Zigbee_Device_Init(void)
 	Zigbee_Release_Device(fd);
 
 	return 0;
+}
+
+int Sensor_Zigbee_ReadData(byte *buf, int len)
+{
+	int fd;
+	byte rbuf[256] = {0};
+	byte res[] = {0xa5,0x06,0x01,0x06,0x00,0x00,0x00,0x00,0x00,0x00,0xba,0xbb,0xb5};
+	int err = 0;
+	int timeout = 60;
+
+	if ((buf == NULL) || (len > 256))
+		return -1;
+
+	if ((fd = Zigbee_Get_Device(ZIGBEE_UART_SPEED)) < 0)
+		return -1;
+
+	memset(rbuf, 0, 256);
+	if ((err = io_readn(fd, rbuf, len, timeout)) != len) {
+		if (err < 0) {
+			perror("read uart");
+		}
+		else {
+			printf("nread %d bytes\n", err);
+		}
+		Zigbee_Release_Device(fd);
+		return -1;
+	}
+
+	if ((memcmp(rbuf, res, 4)) || (memcmp(rbuf + 8, res + 8, 5)))
+		err = -1;
+	else
+		err = 0;
+
+	Zigbee_Release_Device(fd);
+
+	return err;
 }

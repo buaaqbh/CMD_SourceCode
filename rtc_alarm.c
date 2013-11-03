@@ -26,6 +26,31 @@ struct list_head rtc_alarm_list;
 
 static int rtc_dev_fd = -1;
 
+
+time_t mktime_k(struct tm *tm)
+{
+	unsigned int year = tm->tm_year + 1900;
+	unsigned int mon = tm->tm_mon + 1;
+	unsigned int day = tm->tm_mday;
+	unsigned int hour = tm->tm_hour;
+	unsigned int min = tm->tm_min;
+	unsigned int sec = tm->tm_sec;
+
+	printf("%d, %d, %d, %d, %d, %d\n", year, mon, day, hour, min, sec);
+
+	if (0 >= (int) (mon -= 2)) {    /* 1..12 -> 11,12,1..10 */
+		mon += 12;      /* Puts Feb last since it has leap day */
+		year -= 1;
+	}
+
+	return (((
+			(unsigned long) (year/4 - year/100 + year/400 + 367*mon/12 + day) +
+				year*365 - 719499
+			)*24 + hour /* now have hours */
+			)*60 + min /* now have minutes */
+		)*60 + sec; /* finally seconds */
+}
+
 time_t rtc_get_time(void)
 {
 	struct rtc_time rtc_tm;
@@ -141,6 +166,7 @@ int rtc_alarm_update(void)
 {
 	struct rtc_time *rtc_tm;
 	struct rtc_alarm_dev *dev;
+	time_t now;
 	int retval;
 
 #ifdef _DEBUG
@@ -150,10 +176,18 @@ int rtc_alarm_update(void)
 	if (list_empty(&rtc_alarm_list))
 		return 0;
 
+	now = rtc_get_time();
 	dev = list_entry(rtc_alarm_list.next, struct rtc_alarm_dev, list);
+	if (dev->expect < now) {
+		dev->expect = now + 1;
+		printf("-------------Warning: rtc expect less than now ----------\n");
+	}
 	rtc_tm = (struct rtc_time *)localtime(&dev->expect);
 
-	printf("RTC Next Alarm: %s", asctime(localtime(&dev->expect)));
+	{
+		printf("RTC Now  Tieme: %s", ctime(&now));
+		printf("RTC Next Alarm: %s", asctime(localtime(&dev->expect)));
+	}
 
 	/* Disable alarm interrupts */
 	retval = ioctl(rtc_dev_fd, RTC_AIE_OFF, 0);
@@ -207,14 +241,49 @@ int rtc_alarm_add(struct rtc_alarm_dev *timer)
 			list_add(&timer->list, &dev->list);
 	}
 
-/*
+#ifdef _DEBUG
 	list_for_each(plist, &rtc_alarm_list) {
 		dev = list_entry(plist, struct rtc_alarm_dev, list);
 		printf("%s debug: dev->expect = %d\n", __func__, dev->expect);
 	}
-*/
+#endif
 
 //	rtc_alarm_update();
 
 	return 0;
 }
+
+int rtc_alarm_isActive(struct rtc_alarm_dev *timer)
+{
+	struct list_head *plist;
+	struct rtc_alarm_dev *dev;
+	int active = 0;
+
+	list_for_each(plist, &rtc_alarm_list) {
+		dev = list_entry(plist, struct rtc_alarm_dev, list);
+		if (dev == timer) {
+			active = 1;
+			break;
+		}
+	}
+
+	return active;
+}
+
+int rtc_alarm_del(struct rtc_alarm_dev *timer)
+{
+	struct list_head *plist;
+	struct rtc_alarm_dev *dev;
+
+	list_for_each(plist, &rtc_alarm_list) {
+		dev = list_entry(plist, struct rtc_alarm_dev, list);
+		if (dev == timer) {
+			plist = plist->prev;
+			list_del(&dev->list);
+			break;
+		}
+	}
+
+	return 0;
+}
+

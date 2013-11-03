@@ -111,11 +111,14 @@ typedef unsigned char 	byte;
 #define MAX_DATA_BUFSIZE 	256
 
 typedef struct env_data {
-	char 	id[17];
+	char 	id[18];
+	char	c_id[18];
+	usint	org_id;
 	int 	l2_type;
 	int 	local_port;
 	char 	cma_ip[32];
-	int 	cma_port;
+	usint 	cma_port;
+	char	cma_domain[64];
 	int 	s_protocal;
 } env_data_t;
 
@@ -335,7 +338,7 @@ typedef struct _status_str_basic_info
 	byte	Model[10];
 	byte	Essential_Info_Version[4];
 	byte	Bs_Manufacturer[50];
-	byte	Bs_Production_Date[4];
+	int		Bs_Production_Date;
 	byte	Bs_Identifier[20];
 	byte	reserve[30];
 } status_basic_info_t;
@@ -353,8 +356,21 @@ typedef struct _status_str_working
 	byte	reserve[30];
 } status_working_t;
 
+typedef struct _alarm_value {
+	int type;
+	byte alarm_par[6];
+	int  alarm_value;
+} alarm_value_t;
+
 
 #pragma pack() 
+
+#define RECORD_FILE_QIXIANG 	"record_qixiang.dat"
+
+struct record_qixiang {
+	time_t tm;
+	Data_qixiang_t data;
+};
 
 extern unsigned short RTU_CRC(unsigned char *puchMsg, unsigned short usDataLen);
 

@@ -1,0 +1,41 @@
+#
+# CMA configuration
+#
+
+## L2 type, 0: 3G, 1: wifi, 2: ethernet, default 0
+[CMA]
+id						= A0000000000000023
+
+[L2]
+type					= 1
+
+[3G]
+enable					= 1
+
+[WIFI]
+enable					= 0
+ssid					= wlan_home
+proto					= WPA
+key_mgmt				= WPA-PSK
+psk						= 12345678
+
+[ETH]
+address					= 192.168.1.12
+broadcast				= 192.168.1.255
+netmask					= 255.255.255.0
+dns						= 202.106.46.151
+
+[CAN]
+devname					= can0
+bitrate					= 100000
+
+[CAG]
+ip						= 192.168.133.22
+port					= 900
+local_port				= 9000
+s_protocal				= udp
+
+[Parameter]
+samp_period				= 10
+
+
