@@ -1,0 +1,45 @@
+#!/bin/sh
+
+run_script=update-script
+
+if [ ! $# -eq 1 ]; then
+    echo $0 update_file
+    exit 1
+fi
+
+file=$1
+if [ ! -f $file ]
+then
+   echo $file not a valid file.
+   exit 2
+fi
+
+echo Start to Software upgrade: $file
+
+if [ -e tmp ]
+then
+    rm -rf tmp
+fi
+
+mkdir tmp
+tar xzf $file -C tmp
+cd tmp/
+
+if [ ! -f ${run_script} ]
+then
+    echo ${run_script} not found.
+    exit 3
+else
+    echo run update script: $run_script
+    sh $run_script
+    if [ $? != 0 ]
+    then
+        echo Software update fail.
+        cd ..
+        rm -rf tmp
+        exit 4
+    fi
+    cd ..
+    rm -rf tmp
+    exit 0
+fi

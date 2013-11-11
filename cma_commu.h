@@ -29,7 +29,7 @@ extern "C" {
 #include "types.h"
 
 int Commu_GetPacket(int fd, byte *rbuf, int len, int timeout);
-int Commu_GetPacket_Udp(int fd, byte *rbuf, int len);
+int Commu_GetPacket_Udp(int fd, byte *rbuf, int len, int timeout);
 int Commu_SendPacket(int fd, frame_head_t *head, byte *data);
 
 int CMA_Send_SensorData(int fd, int type, void *data);

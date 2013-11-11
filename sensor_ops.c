@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/mman.h>
 #include <net/if.h>
 #include <time.h>
 #include <sys/ioctl.h>
@@ -18,6 +19,7 @@
 #include "file_ops.h"
 #include "io_util.h"
 #include "list.h"
+#include "v4l2_lib.h"
 
 #define RECORD_FILE_WINDSEC		"record_windsec.dat"
 #define RECORD_FILE_WINDAVG		"record_windavg.dat"
@@ -880,14 +882,163 @@ int Sensor_Can_Config(usint addr, usint t)
 	return 0;
 }
 
+int Camera_GetImages(char *ImageName)
+{
+	Ctl_image_device_t par;
+	char cmdshell[128];
+	int ret;
+
+	memset(&par, 0, sizeof(Ctl_image_device_t));
+	if (Camera_GetParameter(&par) < 0) {
+		fprintf(stderr, "CMD: Can't read image parameters, use default.\n");
+		par.Color_Select = 1;
+		par.Resolution = 2;
+		par.Luminance = 50;
+		par.Contrast = 50;
+		par.Saturation = 50;
+	}
+
+	ret = v4l2_capture_image (ImageName, 640, 480, par.Luminance, par.Contrast, par.Saturation);
+	if (ret < 0) {
+		fprintf(stderr, "CMD: Capture an Image error.\n");
+		return -1;
+	}
+
+	if (par.Color_Select ==0 ) {
+		memset(cmdshell, 0, 128);
+		sprintf(cmdshell, "convert -colorspace gray %s %s", ImageName, ImageName);
+		system(cmdshell);
+	}
+
+	if (par.Resolution == 1) {
+		memset(cmdshell, 0, 128);
+		sprintf(cmdshell, "convert -resize 320x240! %s %s", ImageName, ImageName);
+		system(cmdshell);
+	}
+
+	if (par.Resolution == 3) {
+		memset(cmdshell, 0, 128);
+		sprintf(cmdshell, "convert -resize 704x576! %s %s", ImageName, ImageName);
+		system(cmdshell);
+	}
+
+	return 0;
+}
+
+int Camera_GetParameter(Ctl_image_device_t *par)
+{
+	int fd;
+	int len = 0;
+	int ret = 0;
+
+	printf("Enter func: %s ------\n", __func__);
+
+	if (File_Exist(FILE_IMAGECAPTURE_PAR) == 0)
+		return -1;
+
+	fd = File_Open(FILE_IMAGECAPTURE_PAR);
+	if (fd < 0)
+		return -1;
+
+	len = sizeof(Ctl_image_device_t);
+	if (read(fd, par, len) != len)
+		ret = -1;
+
+	File_Close(fd);
+
+	return ret;
+}
+
 int Camera_SetParameter(Ctl_image_device_t *par)
 {
-	return 0;
+	int fd;
+	int len = 0;
+	int ret = 0;
+
+	printf("Enter func: %s ------\n", __func__);
+
+	if (File_Exist(FILE_IMAGECAPTURE_PAR))
+		File_Delete(FILE_IMAGECAPTURE_PAR);
+
+	fd = File_Open(FILE_IMAGECAPTURE_PAR);
+	if (fd < 0)
+		return -1;
+
+	len = sizeof(Ctl_image_device_t);
+	if (write(fd, par, len) != len)
+		ret = -1;
+
+	File_Close(fd);
+
+	return ret;
 }
 
 int Camera_SetTimetable(Ctl_image_timetable_t *tb, byte groups, byte channel)
 {
-	return 0;
+	int fd;
+	usint t1 = 0, t2 = 0;
+	int i, len, ret = 0;
+	int size = 0;
+	char *fbp = NULL;
+	char *to, *from;
+	int copy_len = 0;
+	Ctl_image_timetable_t *data = NULL;
+	char *recordFile = FILE_IMAGE_TIMETABLE0;
+
+	printf("Enter func: %s ------\n", __func__);
+
+	if (File_Exist(recordFile))
+		File_Delete(recordFile);
+
+	len = sizeof(Ctl_image_timetable_t);
+	size = len * groups;
+	if (File_Create(recordFile, size) < 0)
+		return -1;
+
+	fd = File_Open(recordFile);
+	if (fd < 0)
+		return -1;
+	fbp = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	if (fbp == MAP_FAILED) {
+		printf("file mmap error.\n");
+		File_Close(fd);
+		return -1;
+	}
+
+	memset(fbp, 255, size);
+	for (i = 0; i < groups; i++) {
+		t1 = tb[i].Hour * 60 + tb[i].Minute + tb[i].Presetting_No;
+		data = (Ctl_image_timetable_t *)fbp;
+		while (1) {
+			if (data->Hour == 255)
+				break;
+			if (((char *)data + len) > (fbp + size)) {
+				fprintf(stderr, "Never reach here, if here, wrong.\n");
+				return -1;
+			}
+			t2 = data->Hour * 60 + data->Minute + data->Presetting_No;
+			if (t1 < t2) {
+				copy_len = fbp + size - (char *)data - len;
+				to = (char *)(data + 1);
+				from = (char *)data;
+				memmove(to, from, copy_len);
+				memcpy(data, (tb + i), len);
+				break;
+			}
+			data++;
+		}
+		if (data->Hour == 255) {
+			memcpy(data, (tb + i), len);
+		}
+	}
+
+	if (munmap(fbp, size) < 0) {
+		printf("file munmap error.\n");
+	}
+
+	File_Close(fd);
+
+	return ret;
 }
 
 int Camera_StartCapture(byte channel, byte presetting)

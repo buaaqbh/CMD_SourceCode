@@ -16,7 +16,7 @@
 
 volatile int CMD_Response_data = 0;
 
-#define _DEBUG
+//#define _DEBUG
 
 #ifdef _DEBUG
 static void print_message(byte *buf, int len)
@@ -31,7 +31,7 @@ static void print_message(byte *buf, int len)
 }
 #endif
 
-int Commu_GetPacket_Udp(int localport, byte *rbuf, int len)
+int Commu_GetPacket_Udp(int localport, byte *rbuf, int len, int timeout)
 {
 	int ret = 0;
 	usint crc16 = 0;
@@ -44,7 +44,7 @@ int Commu_GetPacket_Udp(int localport, byte *rbuf, int len)
 
 	printf("Begin to receive msg, len = %d\n", len);
 	memset(rbuf, 0, len);
-	ret = socket_recv_udp(localport, rbuf, len);
+	ret = socket_recv_udp(localport, rbuf, len, timeout);
 	if (ret < 0)
 		return ret;
 	if ((rbuf[0] != 0xA5) && (rbuf[1] != 0x5A)) {
@@ -89,7 +89,7 @@ int Commu_GetPacket(int fd, byte *rbuf, int len, int timeout)
 	memset(rbuf, 0, len);
 
 	if (fd == -1) {
-		return Commu_GetPacket_Udp(CMA_Env_Parameter.local_port, rbuf, len);
+		return Commu_GetPacket_Udp(CMA_Env_Parameter.local_port, rbuf, len, timeout);
 	}
 
 //	printf("Begin to receive msg, len = %d\n", len);
@@ -228,6 +228,18 @@ int CMA_Server_Process(int fd, byte *rbuf)
 			if (CMA_RequestData_Response(fd, rbuf) < 0)
 				ret = -1;
 			break;
+		case CMA_MSG_TYPE_CTL_UPGRADE_DATA:
+		case CMA_MSG_TYPE_CTL_UPGRADE_END:
+			if (CMA_SoftWare_Update_Response(fd, rbuf) < 0)
+				ret = -1;
+			break;
+		default:
+			ret = -1;
+			printf("CMA: Invalid MSG type.\n");
+		}
+	}
+	else if (frame_type == CMA_FRAME_TYPE_IMAGE_CTRL) {
+		switch (msg_type) {
 		case CMA_MSG_TYPE_IMAGE_VIDEO_SET:
 			if (CMA_Video_StopStart_Response(fd, rbuf) < 0)
 				ret = -1;
@@ -246,10 +258,6 @@ int CMA_Server_Process(int fd, byte *rbuf)
 			break;
 		case CMA_MSG_TYPE_IMAGE_CAM_ADJ:
 			if (CMA_CameraControl_Response(fd, rbuf) < 0)
-				ret = -1;
-			break;
-		case CMA_MSG_TYPE_CTL_UPGRADE_DATA:
-			if (CMA_SoftWare_Update_Response(fd, rbuf) < 0)
 				ret = -1;
 			break;
 		default:
@@ -727,21 +735,124 @@ int CMA_BasicInfo_SetReq_Response(int fd, byte *rbuf)
 	return 0;
 }
 
-int CMA_SoftWare_Update_Response(int fd, byte *rbuf)
+int CMA_Request_LostPackage(int fd, byte *rbuf, const char *bitmap)
 {
-//	frame_head_t *p_head = (frame_head_t *)rbuf;
-//	int msg_type = p_head->msg_type;
+	frame_head_t *p_head = (frame_head_t *)rbuf;
+	byte sbuf[MAX_COMBUF_SIZE];
 	unsigned int package_num;
-	unsigned int package_index;
+	int *pdata = NULL;
+	int num = 0;
+	int i;
+
+	memcpy(&package_num, (rbuf + sizeof(frame_head_t) + 20), 4);
+
+	memset(sbuf, 0, MAX_DATA_BUFSIZE);
+
+	pdata = (int *)(sbuf + 4);
+
+	num = File_UpdateGetLost(bitmap, package_num, pdata);
+
+	if (num == 0) return 0;
+
+	p_head->frame_type = CMA_FRAME_TYPE_CONTROL_RES;
+	p_head->msg_type = CMA_MSG_TYPE_CTL_UPGRADE_REP;
+	p_head->pack_len = 4 * (num + 1);
+	pdata = (int *)(sbuf);
+	*pdata = num;
+	printf("Lost package number: %d \n", *pdata++);
+	while(*pdata != 0) {
+		printf("%d\n", *pdata++);
+	}
+
+	for (i = 0; i < 5; i++) {
+		if (Commu_SendPacket(fd, p_head, sbuf) < 0)
+			return -1;
+
+		printf("---------- Get Software Upgrade Lost Packages --------------\n");
+		num = Commu_GetPacket(-1, rbuf, MAX_COMBUF_SIZE, 3);
+		if (num > 0) {
+			p_head = (frame_head_t *)rbuf;
+			if (p_head->msg_type == CMA_MSG_TYPE_CTL_UPGRADE_DATA) {
+				CMA_SoftWare_Update_Response(fd, rbuf);
+				break;
+			}
+		}
+	}
+
+	if (i == 5)
+		return -1;
+	else
+		return 0;
+}
+
+static int software_update_end(int fd, byte *rbuf)
+{
+	unsigned int package_num;
+	int time_stamp;
 	char filename[20];
+	char tmp_file[32];
+	char file_bitmap[64];
 
 	memcpy(filename, (rbuf + sizeof(frame_head_t)), 20);
 	memcpy(&package_num, (rbuf + sizeof(frame_head_t) + 20), 4);
-	memcpy(&package_index, (rbuf + sizeof(frame_head_t) + 24), 4);
+	memcpy(&time_stamp, (rbuf + sizeof(frame_head_t) + 24), 4);
+	fprintf(stdout, "Data End, Filename: %s, total num = %d, time = %d\n", filename, package_num, time_stamp);
 
-	/*
-	 *    Process Software Update
-	 */
+	memset(tmp_file, 0, 32);
+	memset(file_bitmap, 0, 64);
+	sprintf(tmp_file, "%s.tmp", filename);
+	sprintf(file_bitmap, "%s.bitmap", filename);
+
+	if (CMA_Request_LostPackage(fd, rbuf, file_bitmap) < 0) {
+		fprintf(stderr, "CMD: Send Lost Packages Request error.\n");
+		goto clear;
+	}
+
+	File_Delete(filename);
+	File_UpgradeConstruct(tmp_file, filename);
+
+	Device_SoftwareUpgrade(filename);
+
+clear:
+	File_Delete(tmp_file);
+	File_Delete(file_bitmap);
+
+	return 0;
+}
+
+int CMA_SoftWare_Update_Response(int fd, byte *rbuf)
+{
+	frame_head_t *p_head = (frame_head_t *)rbuf;
+	int msg_type = p_head->msg_type;
+	unsigned int package_num;
+	unsigned int package_index;
+	char filename[20];
+	char tmp_file[32];
+	char file_bitmap[64];
+	int data_len = 0;
+
+	if (msg_type == CMA_MSG_TYPE_CTL_UPGRADE_DATA) {
+		data_len = p_head->pack_len - 28;
+		memcpy(filename, (rbuf + sizeof(frame_head_t)), 20);
+		memcpy(&package_num, (rbuf + sizeof(frame_head_t) + 20), 4);
+		memcpy(&package_index, (rbuf + sizeof(frame_head_t) + 24), 4);
+		fprintf(stdout, "Filename: %s, total num = %d, index = %d\n", filename, package_num, package_index);
+
+		memset(tmp_file, 0, 32);
+		memset(file_bitmap, 0, 64);
+		sprintf(tmp_file, "%s.tmp", filename);
+		sprintf(file_bitmap, "%s.bitmap", filename);
+
+		if (File_UpgradeWrite_mmap(tmp_file, package_index, data_len, (rbuf + sizeof(frame_head_t) + 28)) < 0)
+			return -1;
+
+		if (File_UpdateBitmap(file_bitmap, package_index, package_num) < 0)
+			return -1;
+	}
+
+	if (msg_type == CMA_MSG_TYPE_CTL_UPGRADE_END) {
+		software_update_end(fd, rbuf);
+	}
 
 	return 0;
 }

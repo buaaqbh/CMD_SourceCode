@@ -65,6 +65,7 @@ extern int Device_getSampling_Cycle(char *entry);
 extern int Device_setSampling_Cycle(char *entry, int value);
 extern int Device_GetAlarm_Threshold(byte type, byte *buf, byte *num);
 extern int Device_SetAlarm_Threshold(byte type, byte *buf, byte num);
+extern int Device_SoftwareUpgrade(const char *fileName);
 
 #ifdef __cplusplus
 } /* extern "C" */

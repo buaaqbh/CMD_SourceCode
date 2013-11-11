@@ -1,0 +1,10 @@
+1. 升级包格式：tar.gz;
+2. 升级包内容：
+   1). CMD_Application, CMD_Application.md5, 如果存在，则校验md5，通过则升级app；
+   2). uImage, uImage.md5, 如果存在且校验通过，则升级内核；
+   3). u-boot.bin, u-boot.bin.md5, 如果存在且校验通过，则升级boot；
+   4). update-script：升级脚本文件
+3. Software运行升级方法：
+   1). 根目录下存在app, app_run 两个目录，软件存放在app目录中；
+   2). 系统启动以后，如果app目录下存在CMD_Application，CMD_Application.md5，且校验通过，则删除app_run下所有文件，拷贝app 到 app_run；
+   3). 软件升级时，校验通过，则拷贝CMD_Application，CMD_Application.md5 到app目录；

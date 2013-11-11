@@ -1,0 +1,62 @@
+#!/bin/sh
+
+ROOTDIR=/home/qinbh/Dropbox/src/CMD_SourceCode/update_test
+APP_PATH=$ROOTDIR/app
+APP_RUNPATH=$ROOTDIR/app_run
+SYSTEM_LIB=$ROOTDIR/lib
+
+if [ -f CMD_Application.md5 ]
+then
+    md5sum CMD_Application.md5
+    if [ $? != 0 ]
+    then
+        echo CMD_Application md5 check fail.
+        exit 1
+    else
+        printf "CMD_Application update ..."
+        rm $APP_PATH/* -rf
+        cp -rPf CMD_Application* $APP_PATH/
+        printf "... End.\n"
+    fi
+fi
+
+if [ -f uImage.md5 ]
+then
+    md5sum uImage.md5
+    if [ $? != 0 ]
+    then
+        echo uImage md5 check fail.
+        exit 2
+    else
+        printf "uImage update ..."
+        dd if=uImage of=/dev/mmcblk0 bs=512 seek=2048 conv=fsync
+        sync
+        printf "... End.\n"
+    fi
+fi
+
+if [ -f u-boot.bin.md5 ]
+then
+    md5sum u-boot.bin.md5
+    if [ $? != 0 ]
+    then
+        echo u-boot.bin md5 check fail.
+        exit 3
+    else
+        printf "u-boot.bin update ..."
+        dd if=u-boot.bin of=/dev/mmcblk0 bs=512 seek=2 skip=2 conv=fsync
+        sync
+        printf "... End.\n"
+    fi
+fi
+
+filelists=`ls | grep ^lib | grep \.so`
+
+for filename in $filelists ; do
+    printf "Copy library files to system lib/ ..."
+    echo $filename
+    cp -rPf $filename $SYSTEM_LIB
+    printf "... End."
+done
+
+exit 0

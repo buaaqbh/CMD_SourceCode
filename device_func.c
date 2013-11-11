@@ -780,3 +780,10 @@ int Device_SetAlarm_Threshold(byte type, byte *buf, byte num)
 
 	return 0;
 }
+
+int Device_SoftwareUpgrade(const char *fileName)
+{
+	system("/usr/sbin/software_upgrade");
+
+	return 0;
+}

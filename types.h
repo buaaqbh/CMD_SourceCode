@@ -367,6 +367,10 @@ typedef struct _alarm_value {
 
 #pragma pack() 
 
+#define FILE_IMAGECAPTURE_PAR 	".image_capture_par.cfg"
+#define FILE_IMAGE_TIMETABLE0 	".image_capture_timetable0.cfg"
+#define FILE_IMAGE_TIMETABLE1 	".image_capture_timetable1.cfg"
+
 #define RECORD_FILE_QIXIANG 	"record_qixiang.dat"
 #define RECORD_FILE_TGQXIE 		"record_tgqxie.dat"
 

@@ -95,7 +95,7 @@ void *socket_heartbeat_func(void * arg)
 
 	while (1) {
 		if (CMA_Env_Parameter.socket_fd < 0) {
-			CMA_Env_Parameter.socket_fd = connect_server(CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.cma_port);
+			CMA_Env_Parameter.socket_fd = connect_server(CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.cma_port, 1);
 			if (CMA_Env_Parameter.socket_fd < 0) {
 				fprintf(stderr, "CMD: Can't Connect to socket server.\n");
 				sleep(5);
@@ -248,7 +248,7 @@ int main(int argc, char *argv[])
 	}
 
 
-	CMA_Env_Parameter.socket_fd = connect_server(CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.cma_port);
+	CMA_Env_Parameter.socket_fd = connect_server(CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.cma_port, 1);
 	if (CMA_Env_Parameter.socket_fd > 0) {
 		fprintf(stdout, "CMD: Send HeartBeat Message.\n");
 		if (CMA_Send_HeartBeat(CMA_Env_Parameter.socket_fd, CMA_Env_Parameter.id) < 0) {

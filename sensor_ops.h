@@ -33,10 +33,12 @@ extern pthread_mutex_t can_mutex;
 void Sensor_Scanning(void);
 int Sensor_GetData(byte *buf, int type);
 int Camera_SetParameter(Ctl_image_device_t *par);
+int Camera_GetParameter(Ctl_image_device_t *par);
 int Camera_SetTimetable(Ctl_image_timetable_t *tb, byte groups, byte channel);
 int Camera_StartCapture(byte channel, byte presetting);
 int Camera_Control(byte action, byte channel);
 int Camera_Video_Start(byte channel, byte control, usint port);
+int Camera_GetImages(char *ImageName);
 
 int Can_Send(byte *buf, int len);
 int Can_Recv(byte *buf);

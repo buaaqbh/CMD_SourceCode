@@ -77,14 +77,16 @@ int start_server(int localport, thrFunc func)
     return serverSocket;
 }
 
-int connect_server(char *destIp, int destPort)
+int connect_server(char *destIp, int destPort, int udp)
 {
     int result;
     struct sockaddr_in address;
     int s_socket;
 
-//	s_socket = socket(AF_INET, SOCK_STREAM, 0);
-    s_socket = socket(AF_INET, SOCK_DGRAM, 0);
+    if (udp)
+    	s_socket = socket(AF_INET, SOCK_DGRAM, 0);
+    else
+    	s_socket = socket(AF_INET, SOCK_STREAM, 0);
 	
     // set server addr
     bzero(&address,sizeof(address)); 
@@ -249,15 +251,24 @@ int socket_send_udp(char *destIp, int destPort, unsigned char *buf, int len)
 		return 0;
 }
 
-int socket_recv_udp(int localport, unsigned char *buf, int len)
+int socket_recv_udp(int localport, unsigned char *buf, int len, int timeout)
 {
     int ret;
     int serverSocket;
     socklen_t sin_len;
-
     struct sockaddr_in server_addr;
 
+	struct timeval tv;
+
     serverSocket = socket(AF_INET, SOCK_DGRAM, 0);
+
+	tv.tv_sec = timeout;
+	tv.tv_usec = 0;
+	ret = setsockopt(serverSocket, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof(struct timeval));
+	if (ret < 0) {
+		perror("setsockopt");
+		return -1;
+	}
 
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -271,6 +282,8 @@ int socket_recv_udp(int localport, unsigned char *buf, int len)
     }
 
     ret = recvfrom(serverSocket, buf, len, 0, (struct sockaddr *)&server_addr, &sin_len);
+    if ((errno == EWOULDBLOCK) || (errno == EAGAIN))
+    	printf("Socket UDP: Receive timeout.\n");
 
     close(serverSocket);
 

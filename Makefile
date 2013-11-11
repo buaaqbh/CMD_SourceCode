@@ -21,11 +21,11 @@ else
 THIRDLIBS = x86-lib
 endif
   
-INCLUDE_PATH = -I/home/qinbh/Dropbox/src/cma/$(THIRDLIBS)/include
+INCLUDE_PATH = -I/home/qinbh/Dropbox/src/CMD_SourceCode/$(THIRDLIBS)/include
 
-LIB_PATH = -L/home/qinbh/Dropbox/src/cma/$(THIRDLIBS)/lib
+LIB_PATH = -L/home/qinbh/Dropbox/src/CMD_SourceCode/$(THIRDLIBS)/lib
 
-LIBS = -lpthread -liniparser -lsocketcan
+LIBS = -lpthread -liniparser -lsocketcan -ljpeg -lv4l2 -lv4lconvert
 
 SRC = $(wildcard *.c)
 

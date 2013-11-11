@@ -1,0 +1,24 @@
+#!/bin/sh
+
+APP_PATH=/app
+APP_RUNPATH=/app_run
+
+if [ -f /app/CMD_Application ]
+then
+    echo CMD_Application exist.
+    
+    cd /app
+    md5sum -c CMD_Application.md5
+    if [ $? == 0 ]
+    then
+        diff /app/CMD_Application /app_run/CMD_Application
+        if [ $? != 0 ]
+        then
+            echo Application Changed, replace /app_run/CMD_Application with /app/CMD_Application
+            rm /app_run/CMD_Application* -rf
+            cp -rPf /app/CMD_Application* /app_run/
+        fi
+    fi
+fi
+
+/app_run/CMD_Application &
