@@ -16,7 +16,7 @@
 #include <sys/mman.h>
 #include "file_ops.h"
 
-static int get_file_size(const char *filename)
+int get_file_size(const char *filename)
 {
 	struct stat buf;
 	if(stat(filename, &buf)<0) {

@@ -29,7 +29,7 @@ extern "C" {
 #include "types.h"
 
 int Commu_GetPacket(int fd, byte *rbuf, int len, int timeout);
-int Commu_GetPacket_Udp(int fd, byte *rbuf, int len, int timeout);
+int Commu_GetPacket_Udp(int fd, int localport, byte *rbuf, int len, int timeout);
 int Commu_SendPacket(int fd, frame_head_t *head, byte *data);
 
 int CMA_Send_SensorData(int fd, int type, void *data);
@@ -49,9 +49,10 @@ int CMA_WakeupTime_Response(int fd, byte *rbuf);
 int CMA_SetImagePar_Response(int fd, byte *rbuf);
 int CMA_CaptureTimetable_Response(int fd, byte *rbuf);
 int CMA_ManualCapture_Response(int fd, byte *rbuf);
-int CMA_Image_SendRequest(int fd, char *id);
-int CMA_Image_SendData(int fd, char *id);
-int CMA_Image_SendData_End(int fd, char *id);
+int CMA_Image_SendRequest(int fd, char *imageName, byte channel, byte presetting);
+int CMA_Image_SendImageFile(int fd, char *ImageFile, byte channel, byte presetting);
+int CMA_Image_SendData_End(int fd, byte channel, byte presetting);
+int CMA_Image_SendImageLost(int fd, char *ImageFile, byte *rbuf);
 int CMA_CameraControl_Response(int fd, byte *rbuf);
 int CMA_Video_StopStart_Response(int fd, byte *rbuf);
 int CMA_Send_HeartBeat(int fd, char *id);

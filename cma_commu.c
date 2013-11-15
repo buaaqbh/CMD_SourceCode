@@ -31,7 +31,7 @@ static void print_message(byte *buf, int len)
 }
 #endif
 
-int Commu_GetPacket_Udp(int localport, byte *rbuf, int len, int timeout)
+int Commu_GetPacket_Udp(int fd, int localport, byte *rbuf, int len, int timeout)
 {
 	int ret = 0;
 	usint crc16 = 0;
@@ -44,16 +44,24 @@ int Commu_GetPacket_Udp(int localport, byte *rbuf, int len, int timeout)
 
 	printf("Begin to receive msg, len = %d\n", len);
 	memset(rbuf, 0, len);
-	ret = socket_recv_udp(localport, rbuf, len, timeout);
-	if (ret < 0)
-		return ret;
+	if (fd == -1) {
+		ret = socket_recv_udp(localport, rbuf, len, timeout);
+		if (ret < 0)
+			return ret;
+	}
+	else {
+		ret = socket_recv(fd, rbuf, len, timeout);
+		if (ret < 0)
+			return ret;
+	}
+
 	if ((rbuf[0] != 0xA5) && (rbuf[1] != 0x5A)) {
 		printf("Invalid package head.\n");
 		return -1;
 	}
 
 	memcpy(&size, (rbuf + 2), 2);
-	printf("size = %d \n", size);
+	printf("size = %d, ret = %d \n", size, ret);
 	if ((size <= 0) || (ret < (size + sizeof(frame_head_t) + 2)))
 		return -1;
 
@@ -89,7 +97,7 @@ int Commu_GetPacket(int fd, byte *rbuf, int len, int timeout)
 	memset(rbuf, 0, len);
 
 	if (fd == -1) {
-		return Commu_GetPacket_Udp(CMA_Env_Parameter.local_port, rbuf, len, timeout);
+		return Commu_GetPacket_Udp(-1, CMA_Env_Parameter.local_port, rbuf, len, timeout);
 	}
 
 //	printf("Begin to receive msg, len = %d\n", len);
@@ -101,7 +109,7 @@ int Commu_GetPacket(int fd, byte *rbuf, int len, int timeout)
 		printf("Invalid package head.\n");
 		return -1;
 	}
-	
+
 	memcpy(&size, (rbuf + 2), 2);
 //	printf("size = %d \n", size);
 	if ((size <= 0) || (ret != sizeof(frame_head_t))) {
@@ -984,25 +992,33 @@ int CMA_ManualCapture_Response(int fd, byte *rbuf)
 //	frame_head_t *p_head = (frame_head_t *)rbuf;
 	byte channel = *(rbuf + sizeof(frame_head_t));
 	byte presetting = *(rbuf + sizeof(frame_head_t) + 1);
+	char filename[256];
+
+	memset(filename, 0, 256);
 
 	/*
 	 *  Set Camera Parameters
 	 */
-	if (Camera_StartCapture(channel, presetting) < 0)
+	if (Camera_StartCapture(filename, channel, presetting) < 0)
+		return -1;
+
+	if (CMA_Image_SendRequest(fd, filename, channel, presetting) < 0)
 		return -1;
 
 	return 0;
 }
 
-int CMA_Image_SendRequest(int fd, char *id)
+#define IMAGE_SUBDATA_LEN	512
+
+int CMA_Image_SendRequest(int fd, char *imageName, byte channel, byte presetting)
 {
 	frame_head_t f_head;
 	Send_image_req_t req;
+	int size = 0;
+	usint pkg_num = 0;
+	int i;
+	byte rbuf[MAX_COMBUF_SIZE];
 
-	if (strlen(id) != 17) {
-		printf("Invalid Device ID.\n");
-		return -1;
-	}
 	memset(&f_head, 0, sizeof(frame_head_t));
 	memset(&req, 0, sizeof(Send_image_req_t));
 
@@ -1010,86 +1026,209 @@ int CMA_Image_SendRequest(int fd, char *id)
 	f_head.pack_len = sizeof(Send_image_req_t);
 	f_head.frame_type = CMA_FRAME_TYPE_IMAGE;
 	f_head.msg_type = CMA_MSG_TYPE_IMAGE_SENDIMG_REQ;
-	memcpy(f_head.id, id, 17);
+	memcpy(f_head.id, CMA_Env_Parameter.id, 17);
 
-	/*
-	 *  Capture an image from camera(channel, position),
-	 *  return Package Number, Image Data
-	 */
+	req.Channel_No = channel;
+	req.Presetting_No = presetting;
+
+	if (File_Exist(imageName) == 0)
+		return -1;
+
+	size = get_file_size(imageName);
+	if (size == 0)
+		return -1;
+
+	pkg_num = (size + IMAGE_SUBDATA_LEN - 1) / IMAGE_SUBDATA_LEN;
+	printf("Send Image: package num = %d, size = %d\n", pkg_num, size);
+	req.Packet_Num = ((pkg_num & 0xff00) >> 8) | ((pkg_num & 0xff) << 8);
 
 	if (Commu_SendPacket(fd, &f_head, (byte *)&req) < 0)
 		return -1;
 
+	for (i = 0; i < 5; i++) {
+		printf("---------- Get Image Request Packages --------------\n");
+		memset(rbuf, 0, MAX_COMBUF_SIZE);
+		Commu_GetPacket_Udp(fd, 0, rbuf, MAX_COMBUF_SIZE, 3);
+		if (memcmp(rbuf, &f_head, sizeof(frame_head_t)) == 0) {
+			if (memcmp((rbuf +  sizeof(frame_head_t)), &req, sizeof(Send_image_req_t)) == 0)
+				break;
+		}
+	}
+	if (i == 5) {
+		fprintf(stderr, "CMD: Receive Image Request Package error.\n");
+		return -1;
+	}
+
+	fprintf(stdout, "CMD: Start to Send Image Data.\n");
+	if (CMA_Image_SendImageFile(fd, imageName, channel, presetting) < 0)
+		return -1;
+
 	return 0;
 }
 
-int CMA_Image_SendData(int fd, char *id)
+int CMA_Image_SendImageFile(int fd, char *ImageFile, byte channel, byte presetting)
 {
 	frame_head_t f_head;
-	byte channel = 0;
-	byte pre_setting = 255;
-	usint package_num;
-	usint subpack_index;
-	byte *sub_data = NULL;
+	frame_head_t *p_head;
 	byte sbuf[MAX_DATA_BUFSIZE];
-	int len = 0;
+	int image_fd;
+	int size = 0;
+	usint pkg_num = 0;
+	byte data[IMAGE_SUBDATA_LEN];
+	byte rbuf[MAX_COMBUF_SIZE];
+	int i, ret;
 
-	if (strlen(id) != 17) {
-		printf("Invalid Device ID.\n");
+	if (File_Exist(ImageFile) == 0)
 		return -1;
-	}
+
+	size = get_file_size(ImageFile);
+	if (size == 0)
+		return -1;
+
+	if ((image_fd = File_Open(ImageFile)) < 0)
+		return -1;
+
+	pkg_num = (size + IMAGE_SUBDATA_LEN - 1) / IMAGE_SUBDATA_LEN;
+	printf("Send Image: package num = %d, size = %d\n", pkg_num, size);
+
 	memset(&f_head, 0, sizeof(frame_head_t));
 
 	f_head.head = 0x5aa5;
 	f_head.frame_type = CMA_FRAME_TYPE_IMAGE;
 	f_head.msg_type = CMA_MSG_TYPE_IMAGE_DATA;
-	memcpy(f_head.id, id, 17);
-
-	/*
-	 *  Get Image Data, sub_data, len
-	 */
+	memcpy(f_head.id, CMA_Env_Parameter.id, 17);
 
 	memset(sbuf, 0, MAX_DATA_BUFSIZE);
 	sbuf[0] = channel;
-	sbuf[1] = pre_setting;
-	memcpy((sbuf + 2), &package_num, 2);
-	memcpy((sbuf + 4), &subpack_index, 2);
-	memcpy((sbuf + 6), sub_data, len);
+	sbuf[1] = presetting;
+	memcpy((sbuf + 2), &pkg_num, 2);
 
-	f_head.pack_len = 6 + len;
+	for (i = 1; i <= pkg_num; i++) {
+		memset(data, 0, IMAGE_SUBDATA_LEN);
+		if ((ret = read(image_fd, &data, IMAGE_SUBDATA_LEN)) <= 0) {
+			fprintf(stderr, "CMD: Read Image file error.\n");
+			break;
+		}
 
-	if (Commu_SendPacket(fd, &f_head, sbuf) < 0)
+		memcpy((sbuf + 4), &i, 2);
+		memcpy((sbuf + 6), data, ret);
+
+		f_head.pack_len = 6 + ret;
+
+		printf("Send Image: i = %d, len = %d\n", i, ret);
+		if (Commu_SendPacket(fd, &f_head, sbuf) < 0)
+			return -1;
+		usleep(20000);
+	}
+
+	sleep(2);
+	if (CMA_Image_SendData_End(fd, channel, presetting) < 0)
 		return -1;
+
+	for (i = 0; i < 5; i++) {
+		printf("---------- Wait Image Lost Packages Request, i = %d --------------\n", i);
+		memset(rbuf, 0, MAX_COMBUF_SIZE);
+		ret = Commu_GetPacket_Udp(fd, 0, rbuf, MAX_COMBUF_SIZE, 3);
+		if (ret > 0) {
+			p_head = (frame_head_t *)rbuf;
+			if (p_head->msg_type == CMA_MSG_TYPE_IMAGE_DATA_REP) {
+				CMA_Image_SendImageLost(fd, ImageFile, rbuf);
+				i = 0;
+			}
+		}
+	}
+
+	File_Close(image_fd);
 
 	return 0;
 }
 
-int CMA_Image_SendData_End(int fd, char *id)
+int CMA_Image_SendImageLost(int fd, char *ImageFile, byte *rbuf)
 {
 	frame_head_t f_head;
-	byte channel = 0;
-	byte pre_setting = 255;
+	byte sbuf[MAX_DATA_BUFSIZE];
+	int image_fd;
+	int size = 0;
+	usint pkg_num = 0;
+	byte data[IMAGE_SUBDATA_LEN];
+	int i, ret;
+	usint index;
+	byte channel = *(rbuf + sizeof(frame_head_t));
+	byte presetting = *(rbuf + sizeof(frame_head_t) + 1);
+	byte *index_buf = rbuf + sizeof(frame_head_t) + 4;
+	usint total = 0;
+
+	memcpy(&total, (rbuf + sizeof(frame_head_t) + 2), 2);
+
+	if (File_Exist(ImageFile) == 0)
+		return -1;
+
+	size = get_file_size(ImageFile);
+	if (size == 0)
+		return -1;
+
+	if ((image_fd = File_Open(ImageFile)) < 0)
+		return -1;
+
+	memset(&f_head, 0, sizeof(frame_head_t));
+
+	f_head.head = 0x5aa5;
+	f_head.frame_type = CMA_FRAME_TYPE_IMAGE;
+	f_head.msg_type = CMA_MSG_TYPE_IMAGE_DATA;
+	memcpy(f_head.id, CMA_Env_Parameter.id, 17);
+
+	memset(sbuf, 0, MAX_DATA_BUFSIZE);
+	sbuf[0] = channel;
+	sbuf[1] = presetting;
+	memcpy((sbuf + 2), &pkg_num, 2);
+
+	for (i = 0; i < total; i++) {
+		memset(data, 0, IMAGE_SUBDATA_LEN);
+		index = (index_buf[0] << 8) | index_buf[1];
+		lseek(image_fd, ((index - 1) * IMAGE_SUBDATA_LEN), SEEK_SET);
+		if ((ret = read(image_fd, &data, IMAGE_SUBDATA_LEN)) <= 0) {
+			fprintf(stderr, "CMD: Read Image file error.\n");
+			break;
+		}
+
+		memcpy((sbuf + 4), &index, 2);
+		memcpy((sbuf + 6), data, ret);
+
+		f_head.pack_len = 6 + ret;
+
+		printf("Send Lost Image: total = %d, index = %d, len = %d\n", total, index, ret);
+		if (Commu_SendPacket(fd, &f_head, sbuf) < 0)
+			return -1;
+		usleep(20000);
+
+		index_buf += 2;
+	}
+
+	sleep(2);
+	if (CMA_Image_SendData_End(fd, channel, presetting) < 0)
+		return -1;
+
+	File_Close(image_fd);
+
+	return 0;
+}
+
+int CMA_Image_SendData_End(int fd, byte channel, byte presetting)
+{
+	frame_head_t f_head;
 	byte sbuf[MAX_DATA_BUFSIZE];
 	int cur_time = time((time_t*)NULL);
 
-	if (strlen(id) != 17) {
-		printf("Invalid Device ID.\n");
-		return -1;
-	}
 	memset(&f_head, 0, sizeof(frame_head_t));
 
 	f_head.head = 0x5aa5;
 	f_head.frame_type = CMA_FRAME_TYPE_IMAGE;
-	f_head.msg_type = CMA_MSG_TYPE_IMAGE_DATA;
-	memcpy(f_head.id, id, 17);
-
-	/*
-	 *  Get Image Data, sub_data, len
-	 */
+	f_head.msg_type = CMA_MSG_TYPE_IMAGE_DATA_END;
+	memcpy(f_head.id, CMA_Env_Parameter.id, 17);
 
 	memset(sbuf, 0, MAX_DATA_BUFSIZE);
 	sbuf[0] = channel;
-	sbuf[1] = pre_setting;
+	sbuf[1] = presetting;
 	memcpy((sbuf + 2), &cur_time, 4);
 
 	f_head.pack_len = 14;
@@ -1104,13 +1243,13 @@ int CMA_CameraControl_Response(int fd, byte *rbuf)
 {
 //	frame_head_t *p_head = (frame_head_t *)rbuf;
 	byte channel = *(rbuf + sizeof(frame_head_t));
-//	byte pre_setting = *(rbuf + sizeof(frame_head_t) + 1);
+	byte pre_setting = *(rbuf + sizeof(frame_head_t) + 1);
 	byte action = *(rbuf + sizeof(frame_head_t) + 2);
 
 	/*
 	 *  Set Camera Parameters
 	 */
-	if (Camera_Control(action, channel) < 0)
+	if (Camera_Control(action, pre_setting, channel) < 0)
 		return -1;
 
 	return 0;

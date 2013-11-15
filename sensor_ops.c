@@ -15,11 +15,13 @@
 #include <linux/can/raw.h>
 #include <pthread.h>
 #include "sensor_ops.h"
+#include "camera_control.h"
 #include "rtc_alarm.h"
 #include "file_ops.h"
 #include "io_util.h"
 #include "list.h"
 #include "v4l2_lib.h"
+#include "cma_commu.h"
 
 #define RECORD_FILE_WINDSEC		"record_windsec.dat"
 #define RECORD_FILE_WINDAVG		"record_windavg.dat"
@@ -37,6 +39,8 @@ struct record_winavg {
 
 struct rtc_alarm_dev wind_sec;
 struct rtc_alarm_dev wind_avg;
+
+struct rtc_alarm_dev camera_dev;
 
 #define  CAN_DEVICE_NAME	"can0"
 unsigned int Sensor_Online_flag = 0;
@@ -882,11 +886,14 @@ int Sensor_Can_Config(usint addr, usint t)
 	return 0;
 }
 
-int Camera_GetImages(char *ImageName)
+int Camera_GetImages(char *ImageName, byte presetting, byte channel)
 {
 	Ctl_image_device_t par;
 	char cmdshell[128];
 	int ret;
+
+	Camera_PowerOn(CAMERA_DEVICE_ADDR);
+	Camera_CallPreset(CAMERA_DEVICE_ADDR, presetting);
 
 	memset(&par, 0, sizeof(Ctl_image_device_t));
 	if (Camera_GetParameter(&par) < 0) {
@@ -973,10 +980,134 @@ int Camera_SetParameter(Ctl_image_device_t *par)
 	return ret;
 }
 
-int Camera_SetTimetable(Ctl_image_timetable_t *tb, byte groups, byte channel)
+void *camera_caputre_func(void *arg)
 {
 	int fd;
 	usint t1 = 0, t2 = 0;
+	Ctl_image_timetable_t data;
+	char *recordFile = FILE_IMAGE_TIMETABLE0;
+	int len = sizeof(Ctl_image_timetable_t);
+	time_t now = rtc_get_time();
+	struct tm *tm;
+	int ret;
+	char imageName[256];
+	byte channel = 1;
+
+	memset(imageName, 0, 256);
+	printf("Enter func: %s ------\n", __func__);
+
+	if (File_Exist(recordFile) == 0)
+		return 0;
+
+	fd = File_Open(recordFile);
+	if (fd < 0)
+		return 0;
+
+	tm = localtime(&now);
+	memset(&data, 0, len);
+	while (1) {
+		if ((ret = read(fd, &data, len)) <= 0) {
+			break;
+		}
+		if ((tm->tm_hour == data.Hour) && (tm->tm_min == data.Minute)) {
+			/* Get an image at this pre-setting */
+			if (Camera_StartCapture(imageName, channel, data.Presetting_No) < 0)
+				return 0;
+
+			if (CMA_Image_SendRequest(-1, imageName, channel, data.Presetting_No) < 0)
+				return 0;;
+		}
+		t1 = tm->tm_hour * 60 + tm->tm_min;
+		t2 = data.Hour * 60 + data.Minute;
+		if (t2 > t1)
+			break;
+	}
+
+	File_Close(fd);
+
+	Camera_NextTimer();
+
+	return 0;
+}
+
+int Camera_NextTimer(void)
+{
+	int fd;
+	usint t1 = 0, t2 = 0;
+	char *recordFile = FILE_IMAGE_TIMETABLE0;
+	Ctl_image_timetable_t data;
+	int len = sizeof(Ctl_image_timetable_t);
+	time_t expect;
+	time_t now = rtc_get_time();
+	struct tm *tm;
+	int ret;
+
+	printf("Enter func: %s ------\n", __func__);
+
+	if (File_Exist(recordFile) == 0)
+		return 0;
+
+	fd = File_Open(recordFile);
+	if (fd < 0)
+		return -1;
+
+	tm = localtime(&now);
+	memset(&data, 0, len);
+	while (1) {
+		if ((ret = read(fd, &data, len)) <= 0) {
+			break;
+		}
+		t1 = tm->tm_hour * 60 + tm->tm_min;
+		t2 = data.Hour * 60 + data.Minute;
+		if (t2 > t1)
+			break;
+	}
+
+	if (t2 > t1) {
+		tm->tm_hour = data.Hour;
+		tm->tm_min = data.Minute;
+		tm->tm_sec = 0;
+		expect = mktime(tm);
+	}
+	else {
+		lseek(fd, 0, SEEK_SET);
+		if ((ret = read(fd, &data, len)) <= 0) {
+			fprintf(stderr, "CMD: Read Camera Caputer timetable error.\n");
+		}
+		expect = now + 24 * 60 * 60;
+		tm = localtime(&expect);
+		tm->tm_hour = data.Hour;
+		tm->tm_min = data.Minute;
+		tm->tm_sec = 0;
+		expect = mktime(tm);
+	}
+
+	File_Close(fd);
+
+	if (rtc_alarm_isActive(&camera_dev))
+		rtc_alarm_del(&camera_dev);
+
+	memset(&camera_dev, 0, sizeof(struct rtc_alarm_dev));
+	camera_dev.func = camera_caputre_func;
+	camera_dev.repeat = 0;
+	camera_dev.interval = 0;
+	camera_dev.expect = expect;
+
+	tm = localtime(&now);
+	printf("Camera Capture: Now, %s", asctime(tm));
+	tm = localtime(&expect);
+	printf("Camera Capture: Expect, %s", asctime(tm));
+
+	rtc_alarm_add(&camera_dev);
+	rtc_alarm_update();
+
+	return 0;
+}
+
+int Camera_SetTimetable(Ctl_image_timetable_t *tb, byte groups, byte channel)
+{
+	int fd;
+	int t1 = 0, t2 = 0;
 	int i, len, ret = 0;
 	int size = 0;
 	char *fbp = NULL;
@@ -1007,7 +1138,7 @@ int Camera_SetTimetable(Ctl_image_timetable_t *tb, byte groups, byte channel)
 
 	memset(fbp, 255, size);
 	for (i = 0; i < groups; i++) {
-		t1 = tb[i].Hour * 60 + tb[i].Minute + tb[i].Presetting_No;
+		t1 = (tb[i].Hour * 60 << 8) + (tb[i].Minute << 8) + tb[i].Presetting_No;
 		data = (Ctl_image_timetable_t *)fbp;
 		while (1) {
 			if (data->Hour == 255)
@@ -1016,7 +1147,7 @@ int Camera_SetTimetable(Ctl_image_timetable_t *tb, byte groups, byte channel)
 				fprintf(stderr, "Never reach here, if here, wrong.\n");
 				return -1;
 			}
-			t2 = data->Hour * 60 + data->Minute + data->Presetting_No;
+			t2 = (data->Hour * 60 << 8) + (data->Minute << 8) + data->Presetting_No;
 			if (t1 < t2) {
 				copy_len = fbp + size - (char *)data - len;
 				to = (char *)(data + 1);
@@ -1038,17 +1169,91 @@ int Camera_SetTimetable(Ctl_image_timetable_t *tb, byte groups, byte channel)
 
 	File_Close(fd);
 
+	Camera_NextTimer();
+
 	return ret;
 }
 
-int Camera_StartCapture(byte channel, byte presetting)
+int Camera_GetImageName(char *filename, byte channel, byte presetting)
 {
+//	char *folder = "/data/images/";
+	char *folder = "data-";
+	time_t now;
+	struct tm *tm;
+
+	if (filename == NULL)
+		return -1;
+
+//	now = rtc_get_time();
+	now = time((time_t*)NULL);
+	tm = localtime(&now);
+
+	memset(filename, 0, 256);
+//	sprintf(filename, "%simages-%d-%d-%d.jpg", folder, (int)now, channel, presetting);
+	sprintf(filename, "%simages-%d%02d%02d%02d%02d%02d-%d-%d.jpg", folder, (tm->tm_year + 1900), (tm->tm_mon + 1), tm->tm_mday,
+			tm->tm_hour, tm->tm_min, tm->tm_sec, channel, presetting);
+
 	return 0;
 }
 
-int Camera_Control(byte action, byte channel)
+int Camera_StartCapture(char *filename, byte channel, byte presetting)
 {
+	if (filename == NULL)
+		return -1;
+
+	Camera_GetImageName(filename, channel, presetting);
+
+	if (Camera_GetImages(filename, presetting, channel) < 0)
+		return -1;
+
+	printf("Get Images: fileName = %s\n", filename);
+
 	return 0;
+}
+
+int Camera_Control(byte action, byte presetting, byte channel)
+{
+	int ret = 0;
+
+	fprintf(stdout, "Camera Control: action = %d, preSetting = %d\n", action, presetting);
+
+	switch (action) {
+	case CAMERA_ACTION_POWERON:
+		Camera_PowerOn(CAMERA_DEVICE_ADDR);
+		break;
+	case CAMERA_ACTION_POWEROFF:
+		Camera_PowerOff(CAMERA_DEVICE_ADDR);
+		break;
+	case CAMERA_ACTION_CALLPRESET:
+		Camera_CallPreset(CAMERA_DEVICE_ADDR, presetting);
+		break;
+	case CAMERA_ACTION_SETPRESET:
+		Camera_SetPreset(CAMERA_DEVICE_ADDR, presetting);
+		break;
+	case CAMERA_ACTION_MOVEUP:
+		Camera_MoveUp(CAMERA_DEVICE_ADDR);
+		break;
+	case CAMERA_ACTION_MOVEDOWN:
+		Camera_MoveDown(CAMERA_DEVICE_ADDR);
+		break;
+	case CAMERA_ACTION_MOVELEFT:
+		Camera_MoveLeft(CAMERA_DEVICE_ADDR);
+		break;
+	case CAMERA_ACTION_MOVERIGHT:
+		Camera_MoveRight(CAMERA_DEVICE_ADDR);
+		break;
+	case CAMERA_ACTION_FOCUSFAR:
+		Camera_FocusFar(CAMERA_DEVICE_ADDR);
+		break;
+	case CAMERA_ACTION_FOCUSNERA:
+		Camera_FocusNear(CAMERA_DEVICE_ADDR);
+		break;
+	default:
+		fprintf(stderr, "CMD: Invalid camera control action.\n");
+		break;
+	}
+
+	return ret;
 }
 
 int Camera_Video_Start(byte channel, byte control, usint port)

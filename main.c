@@ -279,13 +279,15 @@ int main(int argc, char *argv[])
 	printf("Now: %s", asctime(tm));
 	expect = now - tm->tm_sec - (tm->tm_min % 10) * 60;
 	expect += 10 * 60;
-	expect = now;
+//	expect = now;
 	tm = localtime(&expect);
 	printf("Expect: %s", asctime(tm));
 	sample_dev.expect = expect;
 
 	rtc_alarm_add(&sample_dev);
 	rtc_alarm_update();
+
+	Camera_NextTimer();
 
 	while (1) {
 		sleep(60);

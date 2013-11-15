@@ -226,6 +226,9 @@ int rtc_alarm_add(struct rtc_alarm_dev *timer)
 	printf("Enter func: %s.\n", __func__);
 #endif
 
+	if (rtc_alarm_isActive(timer))
+		rtc_alarm_del(timer);
+
 	if (list_empty(&rtc_alarm_list)) {
 		list_add(&timer->list, &rtc_alarm_list);
 	}
@@ -244,7 +247,7 @@ int rtc_alarm_add(struct rtc_alarm_dev *timer)
 #ifdef _DEBUG
 	list_for_each(plist, &rtc_alarm_list) {
 		dev = list_entry(plist, struct rtc_alarm_dev, list);
-		printf("%s debug: dev->expect = %d\n", __func__, dev->expect);
+		printf("%s debug: dev->expect = %d, dev = %08x\n", __func__, dev->expect, dev);
 	}
 #endif
 
@@ -259,6 +262,8 @@ int rtc_alarm_isActive(struct rtc_alarm_dev *timer)
 	struct rtc_alarm_dev *dev;
 	int active = 0;
 
+//	printf("Enter func: %s.\n", __func__);
+
 	list_for_each(plist, &rtc_alarm_list) {
 		dev = list_entry(plist, struct rtc_alarm_dev, list);
 		if (dev == timer) {
@@ -267,6 +272,8 @@ int rtc_alarm_isActive(struct rtc_alarm_dev *timer)
 		}
 	}
 
+//	printf("active = %d\n", active);
+
 	return active;
 }
 
@@ -274,6 +281,8 @@ int rtc_alarm_del(struct rtc_alarm_dev *timer)
 {
 	struct list_head *plist;
 	struct rtc_alarm_dev *dev;
+
+//	printf("Enter func: %s.\n", __func__);
 
 	list_for_each(plist, &rtc_alarm_list) {
 		dev = list_entry(plist, struct rtc_alarm_dev, list);

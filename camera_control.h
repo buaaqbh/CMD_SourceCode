@@ -10,6 +10,8 @@
 
 #include "types.h"
 
+#define CAMERA_DEVICE_ADDR		0x01
+
 void Camera_PowerOn(byte addr);
 void Camera_PowerOff(byte addr);
 void Camera_CallPreset(byte addr, byte index);

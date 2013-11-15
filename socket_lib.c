@@ -219,7 +219,7 @@ int socket_recv(int sockfd, unsigned char *buf, int len, int timeout)
 		}
 	}
 
-	return len;
+	return len - total_len;
 }
 
 int socket_send_udp(char *destIp, int destPort, unsigned char *buf, int len)

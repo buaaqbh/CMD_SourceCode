@@ -8,6 +8,8 @@
 #ifndef FILE_OPS_H_
 #define FILE_OPS_H_
 
+int get_file_size(const char *filename);
+
 int File_Open(const char *FileName);
 void File_Close(int fd);
 int File_Create(const char *FileName, int size);
