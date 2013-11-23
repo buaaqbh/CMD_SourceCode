@@ -26,6 +26,8 @@
 extern "C" {
 #endif
 
+
+#define CMA_NEW_TEST_PLATFORM			1
 //#define CMD_SENSOR_AUTO_DETECT			1
 
 #define CMA_FRAME_TYPE_DATA				0x01

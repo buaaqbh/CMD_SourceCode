@@ -399,6 +399,15 @@ int Device_get_basic_info(status_basic_info_t *dev)
 
 int Device_get_working_status(status_working_t *status)
 {
+	struct timespec t;
+
+	clock_gettime(CLOCK_MONOTONIC, &t);
+//	printf("tv_sec=%llu, tv_nsec=%llu\n", (unsigned long long)t.tv_sec, (unsigned long long)t.tv_nsec);
+
+	status->Time_Stamp = (int)time((time_t*)NULL);
+	status->Working_Time = t.tv_sec / 3600;
+	status->Total_Working_Time = status->Working_Time;
+
 	return 0;
 }
 

@@ -188,7 +188,7 @@ int socket_recv(int sockfd, unsigned char *buf, int len, int timeout)
 
 	while(1) {
 		recvBytes = recv(sockfd, p_buf, total_len, 0);
-//		printf("recv return: %d, requred len = %d, errno = %d\n", recvBytes, len, errno);
+		printf("recv return: %d, requred len = %d, errno = %d\n", recvBytes, len, errno);
 		if( recvBytes < 0 && errno != EINTR) {
 			if ((errno == EWOULDBLOCK) || (errno == EAGAIN))
 				printf("Receive timeout.\n");
@@ -205,6 +205,7 @@ int socket_recv(int sockfd, unsigned char *buf, int len, int timeout)
 		else if( recvBytes > 0 )
 		{
 			if (recvBytes == total_len) {
+				total_len -= recvBytes;
 				break;
 			}
 			total_len -= recvBytes;

@@ -64,8 +64,7 @@ void *socket_receive_func(void * arg)
 		if (CMA_Env_Parameter.socket_fd > 0) {
 			memset(rbuf, 0, MAX_DATA_BUFSIZE);
 			printf("CMD: Start to read socket message.\n");
-//			ret = Commu_GetPacket(CMA_Env_Parameter.socket_fd, rbuf, MAX_COMBUF_SIZE, 0);
-			ret = Commu_GetPacket(-1, rbuf, MAX_COMBUF_SIZE, 0);
+			ret = Commu_GetPacket(CMA_Env_Parameter.socket_fd, rbuf, MAX_COMBUF_SIZE, 0);
 			if (ret == -2) {
 				printf("CMD Server receive MSG error!\n");
 				CMA_Env_Parameter.socket_fd = -1;
@@ -108,13 +107,13 @@ void *socket_heartbeat_func(void * arg)
 				CMA_Env_Parameter.socket_fd = -1;
 			}
 		}
-/*
+
 		fprintf(stdout, "CMD: Send HeartBeat Message.\n");
 		if (CMA_Send_HeartBeat(CMA_Env_Parameter.socket_fd, CMA_Env_Parameter.id) < 0) {
 			fprintf(stderr, "CMD: Send HeartBeat Message error.\n");
 			CMA_Env_Parameter.socket_fd = -1;
 		}
-*/
+
 #if 0
 		int timeout = 500;
 		CMD_Response_data = -1;
@@ -248,7 +247,7 @@ int main(int argc, char *argv[])
 	}
 
 
-	CMA_Env_Parameter.socket_fd = connect_server(CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.cma_port, 1);
+	CMA_Env_Parameter.socket_fd = connect_server(CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.cma_port, 0);
 	if (CMA_Env_Parameter.socket_fd > 0) {
 		fprintf(stdout, "CMD: Send HeartBeat Message.\n");
 		if (CMA_Send_HeartBeat(CMA_Env_Parameter.socket_fd, CMA_Env_Parameter.id) < 0) {
@@ -257,9 +256,9 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	ret = pthread_create(&p_heartbeat, NULL, socket_heartbeat_func, NULL);
-	if (ret != 0)
-		printf("Sensor: can't create thread.");
+//	ret = pthread_create(&p_heartbeat, NULL, socket_heartbeat_func, NULL);
+//	if (ret != 0)
+//		printf("Sensor: can't create thread.");
 
 	ret = pthread_create(&pid_socket, NULL, socket_receive_func, NULL);
 	if (ret != 0)
