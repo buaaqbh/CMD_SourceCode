@@ -5,12 +5,12 @@
 #  cmd        : make  
 #*******************************************************************************  
   
-SER_NAME = cma
+SER_NAME = CMD
 #M_DATE = `date '+%y%m%d'`
-M_DATE = app
+M_DATE = Application
 
 
-#CROSS_COMPILE = /opt/freescale/usr/local/gcc-4.6.2-glibc-2.13-linaro-multilib-2011.12/fsl-linaro-toolchain/bin/arm-linux-
+CROSS_COMPILE = /opt/freescale/usr/local/gcc-4.6.2-glibc-2.13-linaro-multilib-2011.12/fsl-linaro-toolchain/bin/arm-linux-
 CXX = $(CROSS_COMPILE)gcc
 #AR  = ar cr
 COMPILE_FLAGS = -Wall
@@ -25,7 +25,7 @@ INCLUDE_PATH = -I/home/qinbh/Dropbox/src/CMD_SourceCode/$(THIRDLIBS)/include
 
 LIB_PATH = -L/home/qinbh/Dropbox/src/CMD_SourceCode/$(THIRDLIBS)/lib
 
-LIBS = -lpthread -liniparser -lsocketcan -ljpeg -lv4l2 -lv4lconvert
+LIBS = -lpthread -liniparser -lsocketcan -ljpeg -lv4l2 -lv4lconvert -liconv
 
 SRC = $(wildcard *.c)
 

@@ -14,7 +14,7 @@
 #include "zigbee_ops.h"
 #include "uart_ops.h"
 
-#define  ZIGBEE_UART_NAME 	"/dev/ttymxc1"
+#define  ZIGBEE_UART_NAME 	"/dev/ttymxc2"
 //#define  ZIGBEE_UART_NAME 	"/dev/ttyS0"
 #define  ZIGBEE_UART_SPEED 	9600
 

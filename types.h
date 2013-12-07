@@ -160,7 +160,7 @@ typedef struct _data_str_qixiang
 	int 	Max_WindSpeed;
 	int 	Extreme_WindSpeed;
 	int 	Standard_WindSpeed;
-	int 	Air_Temperature;
+	float 	Air_Temperature;
 	usint 	Humidity;
 	int 	Air_Pressure;
 	int 	Precipitation;
@@ -175,11 +175,11 @@ typedef struct _data_str_incline
 	byte 	Component_ID[17];
 	int 	Time_Stamp;
 	usint 	Alerm_Flag;
-	int 	Inclination;
-	int 	Inclination_X;
-	int 	Inclination_Y;
-	int 	Angle_X;
-	int 	Angle_Y;
+	float 	Inclination;
+	float 	Inclination_X;
+	float 	Inclination_Y;
+	float 	Angle_X;
+	float 	Angle_Y;
 	int 	Reserve1;
 	int 	Reserve2;
 } Data_incline_t;
@@ -380,16 +380,23 @@ typedef struct _alarm_value {
 
 #pragma pack() 
 
-#define FILE_IMAGECAPTURE_PAR 	".image_capture_par.cfg"
-#define FILE_IMAGE_TIMETABLE0 	".image_capture_timetable0.cfg"
-#define FILE_IMAGE_TIMETABLE1 	".image_capture_timetable1.cfg"
+#define FILE_IMAGECAPTURE_PAR 	"/CMD_Data/.image_capture_par.cfg"
+#define FILE_IMAGE_TIMETABLE0 	"/CMD_Data/.image_capture_timetable0.cfg"
+#define FILE_IMAGE_TIMETABLE1 	"/CMD_Data/.image_capture_timetable1.cfg"
 
-#define RECORD_FILE_QIXIANG 	"record_qixiang.dat"
-#define RECORD_FILE_TGQXIE 		"record_tgqxie.dat"
+#define FILE_ALARM_PAR 			"/CMD_Data/.sensor_alarm_par.cfg"
+
+#define RECORD_FILE_QIXIANG 	"/CMD_Data/record_qixiang.dat"
+#define RECORD_FILE_TGQXIE 		"/CMD_Data/record_tgqxie.dat"
 
 struct record_qixiang {
 	time_t tm;
 	Data_qixiang_t data;
+};
+
+struct record_incline {
+	time_t tm;
+	Data_incline_t data;
 };
 
 extern unsigned short RTU_CRC(unsigned char *puchMsg, unsigned short usDataLen);

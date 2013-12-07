@@ -12,7 +12,7 @@ typedef unsigned char     u8;
 typedef unsigned short    u16;
 typedef unsigned int      u32;
 
-#define offsetof(TYPE, MEMBER)   ((size_t) &((TYPE *)0)->MEMBER)
+#define offsetof__f(TYPE, MEMBER)   ((size_t) &((TYPE *)0)->MEMBER)
 
 /**
  * container_of - cast a member of a structure out to the containing structure
@@ -21,7 +21,7 @@ typedef unsigned int      u32;
  * @member:    the name of the member within the struct.
  *
  */
-#define container_of(ptr, type, member) (type *)((char *)ptr -offsetof(type,member))
+#define container_of(ptr, type, member) (type *)((char *)ptr -offsetof__f(type,member))
 
 /*
  * These are non-NULL pointers that will result in page faults

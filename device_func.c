@@ -17,6 +17,7 @@
 #include <net/if.h>
 #include <libsocketcan.h>
 #include <iconv.h>
+#include <pthread.h>
 #include "types.h"
 #include "device.h"
 #include "iniparser.h"
@@ -36,10 +37,12 @@ int Device_Env_init(void)
 
 	memset(&CMA_Env_Parameter, 0, sizeof(env_data_t));
 
+	CMA_Env_Parameter.socket_fd = -1;
+
 	ini = iniparser_load(config_file);
 	if (ini==NULL) {
 		fprintf(stderr, "cannot parse file: %s\n", config_file);
-			return -1 ;
+		return -1 ;
 	}
 
 	id = iniparser_getstring(ini, "CMD:id", NULL);
@@ -182,7 +185,6 @@ static int create_wpa_conf(void)
 
 int Device_wifi_init(void)
 {
-#if 0
 	char cmd_shell[SHELL_MAX_BUF_LEN];
 	char result[MAX_SHELL_OUTPU_LEN];
 	char *cmd_insmod = "/sbin/insmod ";
@@ -206,35 +208,34 @@ int Device_wifi_init(void)
 		printf("Start wpa_supplicant error!\n");
 		return -1;
 	}
-#endif
 	
 	printf("Wifi Module Init OK.\n");
     
     return 0;
 }
 
+void *W3G_Start_func(void *data)
+{
+	char *cmd_shell = "/usr/sbin/start_3G.sh >/tmp/w3g.log";
+
+	fprintf(stdout, "CMD: Start 3G Module.\n");
+
+//	system(cmd_shell);
+
+	fprintf(stdout, "CMD: Exit 3G Module.\n");
+
+	return 0;
+}
+
 int Device_W3G_init(void)
 {
-	char *cmd_shell = "./start_3G.sh";
-	pid_t pid;
-	
-	pid = fork();
-    if(pid == -1) {
-        perror("fork error");
-        exit(EXIT_FAILURE);
+    pthread_t p;
+
+    if(pthread_create( &p, NULL, W3G_Start_func, NULL)) {
+        printf("W3G_Start_func start error!\n");
+        return -1;
     }
-    if(pid == 0){
-//		printf("this is child process and child's pid = %d,parent's pid = %d\n",getpid(),getppid());
-        system(cmd_shell);
-        exit(0);
-    }
-    if(pid > 0){
-        //sleep(1);
-//		printf("this is parent process and pid =%d ,child's pid = %d\n",getpid(),pid);
-        printf("3G Module Init OK.\n");
-        return 0;
-    }
-    
+
     return 0;
 }
 
@@ -331,11 +332,15 @@ int code_convert(char *from_charset, char *to_charset, char *inbuf, int inlen, c
 	char **pout = &outbuf;
 
 	cd = iconv_open(to_charset, from_charset);
-	if (cd == 0)
+	if (cd == 0) {
+		printf("Open error.\n");
 		return -1;
+	}
 	memset(outbuf, 0, outlen);
-	if (iconv(cd, pin, (size_t *)&inlen, pout, (size_t *)&outlen) == -1)
-		return -1;
+	if (iconv(cd, pin, (size_t *)&inlen, pout, (size_t *)&outlen) == -1) {
+		perror("iconv");
+//		return -1;
+	}
 	iconv_close(cd);
 	return 0;
 }
@@ -347,10 +352,10 @@ int Device_get_basic_info(status_basic_info_t *dev)
 	struct tm tm;
 
 	ini = iniparser_load(config_file);
-    if (ini==NULL) {
-        fprintf(stderr, "cannot parse file: %s\n", config_file);
-        return -1 ;
-    }
+	if (ini==NULL) {
+		fprintf(stderr, "cannot parse file: %s\n", config_file);
+		return -1 ;
+	}
 
     str = iniparser_getstring(ini, "device:name", NULL);
     if (str != NULL) {
@@ -380,6 +385,7 @@ int Device_get_basic_info(status_basic_info_t *dev)
     str = iniparser_getstring(ini, "device:bsid", NULL);
     if (str != NULL) {
 //    	memcpy(dev->Bs_Identifier, str, strlen(str));
+//    	printf("BS_id: %s\n", dev->Bs_Identifier);
     	code_convert("utf-8", "gb2312", str, strlen(str), (char *)dev->Bs_Identifier, 20);
     }
 
@@ -394,6 +400,7 @@ int Device_get_basic_info(status_basic_info_t *dev)
     }
 
 	iniparser_freedict(ini);
+
 	return 0;
 }
 
@@ -719,15 +726,12 @@ int Device_setSampling_Cycle(char *entry, int value)
 	iniparser_dump_ini(ini, save);
 	fclose(save);
 
-	sample_dev.interval = value * 60;
 //	printf("Device func: %d, 0x%08x\n", sample_dev.interval, (unsigned int)&sample_dev);
 
 out:
 	iniparser_freedict(ini);
 	return cycle;
 }
-
-#define  FILE_ALARM_PAR     ".sensor_alarm_par.cfg"
 
 int Device_GetAlarm_Threshold(byte type, byte *buf, byte *num)
 {

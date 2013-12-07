@@ -31,7 +31,7 @@ extern "C" {
 #define SHELL_MAX_BUF_LEN 512
 #define MAX_SHELL_OUTPU_LEN	2048
 
-#define CMA_CONFIG_FILE   "cma_config.ini"
+#define CMA_CONFIG_FILE   "/etc/cma_config.ini"
 
 #define WLAN_MODULE "/lib/modules/ath.ko"
 #define WLAN_DEVICE	"wlan0"

@@ -102,6 +102,8 @@ int connect_server(char *destIp, int destPort, int udp)
 		return -1;
 	}
 	
+	printf("############ Connect to server: %s:%d, socket = %d #############\n", destIp, destPort, s_socket);
+
 	return s_socket;
 }
 
@@ -188,10 +190,11 @@ int socket_recv(int sockfd, unsigned char *buf, int len, int timeout)
 
 	while(1) {
 		recvBytes = recv(sockfd, p_buf, total_len, 0);
-		printf("recv return: %d, requred len = %d, errno = %d\n", recvBytes, len, errno);
+//		printf("recv return: %d, requred len = %d, errno = %d\n", recvBytes, len, errno);
 		if( recvBytes < 0 && errno != EINTR) {
-			if ((errno == EWOULDBLOCK) || (errno == EAGAIN))
-				printf("Receive timeout.\n");
+			if ((errno == EWOULDBLOCK) || (errno == EAGAIN)) {
+//				printf("Receive timeout.\n");
+			}
 			else {
 				printf("Receive: error occur!\n");
 				return -2;

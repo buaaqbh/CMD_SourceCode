@@ -56,7 +56,7 @@ int CMA_Image_SendImageLost(int fd, char *ImageFile, byte *rbuf);
 int CMA_CameraControl_Response(int fd, byte *rbuf);
 int CMA_Video_StopStart_Response(int fd, byte *rbuf);
 int CMA_Send_HeartBeat(int fd, char *id);
-int CMA_Send_BasicInfo(int fd, char *id);
+int CMA_Send_BasicInfo(int fd, char *id, int wait);
 int CMA_Send_WorkStatus(int fd, char *id);
 int CMA_Send_Fault_Info(int fd, char *id, char *fault_desc);
 

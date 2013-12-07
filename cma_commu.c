@@ -16,7 +16,7 @@
 
 volatile int CMD_Response_data = 0;
 
-#define _DEBUG
+//#define _DEBUG
 
 #ifdef _DEBUG
 static void print_message(byte *buf, int len)
@@ -55,15 +55,15 @@ int Commu_GetPacket_Udp(int fd, int localport, byte *rbuf, int len, int timeout)
 			return ret;
 	}
 
-	if ((rbuf[0] != 0xA5) && (rbuf[1] != 0x5A)) {
-		printf("Invalid package head.\n");
-		return -1;
-	}
-
 	memcpy(&size, (rbuf + 2), 2);
 	printf("size = %d, ret = %d \n", size, ret);
 	if ((size <= 0) || (ret < (size + sizeof(frame_head_t) + 2)))
 		return -1;
+
+	if ((rbuf[0] != 0xA5) && (rbuf[1] != 0x5A)) {
+		printf("Invalid package head.\n");
+		return -1;
+	}
 
 	memcpy(&crc16, (rbuf + size + sizeof(frame_head_t)), 2);
 
@@ -96,19 +96,11 @@ int Commu_GetPacket(int fd, byte *rbuf, int len, int timeout)
 
 	memset(rbuf, 0, len);
 
-	if (fd == -1) {
-		return Commu_GetPacket_Udp(-1, CMA_Env_Parameter.local_port, rbuf, len, timeout);
-	}
-
-	printf("Begin to receive msg, len = %d\n", len);
+//	printf("Begin to receive msg, len = %d\n", len);
 	
 	ret = socket_recv(fd, rbuf, sizeof(frame_head_t), timeout);
 	if (ret < 0)
 		return ret;
-	if ((rbuf[0] != 0xA5) && (rbuf[1] != 0x5A)) {
-		printf("Invalid package head.\n");
-		return -1;
-	}
 
 	memcpy(&size, (rbuf + 2), 2);
 //	printf("size = %d \n", size);
@@ -116,6 +108,11 @@ int Commu_GetPacket(int fd, byte *rbuf, int len, int timeout)
 		return -1;
 	}
 	
+	if ((rbuf[0] != 0xA5) && (rbuf[1] != 0x5A)) {
+		printf("Invalid package head.\n");
+		return -1;
+	}
+
 	ret = socket_recv(fd, (rbuf + sizeof(frame_head_t)), (size + 2), timeout);
 	if (ret < 0)
 		return ret;
@@ -314,7 +311,9 @@ int CMA_Send_SensorData(int fd, int type, void *data)
 		f_head.msg_type = CMA_MSG_TYPE_DATA_QXENV;
 		break;
 	case CMA_MSG_TYPE_DATA_TGQXIE:
+	case CMA_MSG_TYPE_CTL_TGQX_PAR:
 		f_head.pack_len = sizeof(Data_incline_t);
+		f_head.msg_type = CMA_MSG_TYPE_DATA_TGQXIE;
 		break;
 	case CMA_MSG_TYPE_DATA_DDXWFTZ:
 		f_head.pack_len = sizeof(Data_vibration_f_t);
@@ -399,6 +398,7 @@ int CMA_Time_SetReq_Response(int fd, byte *rbuf)
 //		printf("Set time: %d, %s \n", (int)tv.tv_sec, asctime(gmtime(&cur_time)));
 		if (settimeofday(&tv, &tz) < 0)
 			printf("CMA: Set time error.\n");
+		rtc_set_time(gmtime(&cur_time));
 	}
 	
 	cur_time = time((time_t*)NULL);
@@ -472,12 +472,15 @@ static int CMA_Send_RecordingData(int fd, byte type, time_t start, time_t end)
 
 	switch (type) {
 	case CMA_MSG_TYPE_DATA_QXENV:
+	case CMA_MSG_TYPE_CTL_QX_PAR:
 		filename = RECORD_FILE_QIXIANG;
 		record_len = sizeof(struct record_qixiang);
 		break;
 	case CMA_MSG_TYPE_DATA_TGQXIE:
-//		filename = RECORD_FILE_TGQXIE;
-//		break;
+	case CMA_MSG_TYPE_CTL_TGQX_PAR:
+		filename = RECORD_FILE_TGQXIE;
+		record_len = sizeof(struct record_incline);
+		break;
 	case CMA_MSG_TYPE_DATA_DDXWFTZ:
 //		break;
 	case CMA_MSG_TYPE_DATA_DDXWFBX:
@@ -489,6 +492,7 @@ static int CMA_Send_RecordingData(int fd, byte type, time_t start, time_t end)
 	case CMA_MSG_TYPE_DATA_FUBING:
 //		break;
 	case CMA_MSG_TYPE_DATA_DXFP:
+	case CMA_MSG_TYPE_CTL_DXFP_PAR:
 //		break;
 	case CMA_MSG_TYPE_DATA_DXWDTZH:
 //		break;
@@ -596,6 +600,11 @@ int CMA_SamplePar_SetReq_Response(int fd, byte *rbuf)
 			if (cycle > 0)
 				sample_par->Main_Time = cycle;
 			break;
+		case CMA_MSG_TYPE_CTL_TGQX_PAR:
+			cycle = Device_getSampling_Cycle("tgqingxie:samp_period");
+			if (cycle > 0)
+				sample_par->Main_Time = cycle;
+			break;
 		default:
 			sbuf[0] = 0x00;
 			return -1;
@@ -608,6 +617,13 @@ int CMA_SamplePar_SetReq_Response(int fd, byte *rbuf)
 			cycle = sample_par->Main_Time;
 			if (cycle > 0)
 				Device_setSampling_Cycle("qixiang:samp_period", cycle);
+			sample_dev.interval = cycle * 60;
+			break;
+		case CMA_MSG_TYPE_CTL_TGQX_PAR:
+			cycle = sample_par->Main_Time;
+			if (cycle > 0)
+				Device_setSampling_Cycle("tgqingxie:samp_period", cycle);
+			sample_dev_1.interval = cycle * 60;
 			break;
 		default:
 			sbuf[0] = 0x00;
@@ -764,7 +780,7 @@ int CMA_BasicInfo_SetReq_Response(int fd, byte *rbuf)
 		return -1;
 
 	if (msg_type == 0x01)
-		CMA_Send_BasicInfo(fd, CMA_Env_Parameter.id);
+		CMA_Send_BasicInfo(fd, CMA_Env_Parameter.id, 1);
 	else if (msg_type == 0x02)
 		CMA_Send_WorkStatus(fd, CMA_Env_Parameter.id);
 	else
@@ -1078,7 +1094,7 @@ int CMA_Image_SendRequest(int fd, char *imageName, byte channel, byte presetting
 	for (i = 0; i < 5; i++) {
 		printf("---------- Get Image Request Packages --------------\n");
 		memset(rbuf, 0, MAX_COMBUF_SIZE);
-		Commu_GetPacket_Udp(fd, 0, rbuf, MAX_COMBUF_SIZE, 3);
+		Commu_GetPacket(fd, rbuf, MAX_COMBUF_SIZE, 3);
 		if (memcmp(rbuf, &f_head, sizeof(frame_head_t)) == 0) {
 			if (memcmp((rbuf +  sizeof(frame_head_t)), &req, sizeof(Send_image_req_t)) == 0)
 				break;
@@ -1145,7 +1161,7 @@ int CMA_Image_SendImageFile(int fd, char *ImageFile, byte channel, byte presetti
 
 		f_head.pack_len = 6 + ret;
 
-		printf("Send Image: i = %d, len = %d\n", i, ret);
+		printf("Send Image: i = %d, len = %d, fd = %d\n", i, ret, fd);
 		if (Commu_SendPacket(fd, &f_head, sbuf) < 0)
 			return -1;
 		usleep(20000);
@@ -1158,7 +1174,7 @@ int CMA_Image_SendImageFile(int fd, char *ImageFile, byte channel, byte presetti
 	for (i = 0; i < 5; i++) {
 		printf("---------- Wait Image Lost Packages Request, i = %d --------------\n", i);
 		memset(rbuf, 0, MAX_COMBUF_SIZE);
-		ret = Commu_GetPacket_Udp(fd, 0, rbuf, MAX_COMBUF_SIZE, 3);
+		ret = Commu_GetPacket(fd, rbuf, MAX_COMBUF_SIZE, 3);
 		if (ret > 0) {
 			p_head = (frame_head_t *)rbuf;
 			if (p_head->msg_type == CMA_MSG_TYPE_IMAGE_DATA_REP) {
@@ -1347,7 +1363,7 @@ int CMA_Wait_Response(int fd, byte frame_type, byte msg_type, int timeout)
 	return 0;
 }
 
-int CMA_Send_BasicInfo(int fd, char *id)
+int CMA_Send_BasicInfo(int fd, char *id, int wait)
 {
 	frame_head_t f_head;
 	status_basic_info_t dev;
@@ -1369,11 +1385,16 @@ int CMA_Send_BasicInfo(int fd, char *id)
 	if (Device_get_basic_info(&dev) < 0)
 			return -1;
 
+	CMD_Response_data = -1;
+
 	if (Commu_SendPacket(fd, &f_head, (byte *)&dev) < 0)
 		return -1;
 
-	if (CMA_Wait_Response(fd, CMA_FRAME_TYPE_STATUS_RES, CMA_MSG_TYPE_STATUS_INFO, 3) == 0xff) {
-		fprintf(stdout, "CMD: Send Basic Info OK.\n");
+	if (wait) {
+		if (CMA_Wait_Response(fd, CMA_FRAME_TYPE_STATUS_RES, CMA_MSG_TYPE_STATUS_INFO, 3) != 0xff) {
+			fprintf(stdout, "CMD: Send Basic Info Error.\n");
+			return -1;
+		}
 	}
 
 	return 0;

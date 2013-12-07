@@ -23,8 +23,8 @@
 #include "v4l2_lib.h"
 #include "cma_commu.h"
 
-#define RECORD_FILE_WINDSEC		"record_windsec.dat"
-#define RECORD_FILE_WINDAVG		"record_windavg.dat"
+#define RECORD_FILE_WINDSEC		"/CMD_Data/record_windsec.dat"
+#define RECORD_FILE_WINDAVG		"/CMD_Data/record_windavg.dat"
 
 struct record_winsec {
 	time_t tm;
@@ -84,12 +84,14 @@ static struct can_device Sensor_CAN_List_Qixiang[] = {
 	},
 };
 
-/*
 static struct can_device Sensor_CAN_List_Angle[] = {
 	{
 		.type = SENSOR_ANGLE,
 		.addr = 0x0028,
 	},
+};
+
+static struct can_device Sensor_CAN_List_PullForce[] = {
 	{
 		.type = SENSOR_TENSION,
 		.addr = 0x003c,
@@ -103,7 +105,6 @@ static struct can_device Sensor_CAN_List_Angle[] = {
 		.addr = 0x003e,
 	},
 };
-*/
 
 typedef struct sensor_device {
 	int interface; /* 0: CAN, 1: Zigbee */
@@ -251,7 +252,7 @@ void *sensor_sample_qixiang_1(void * arg)
 					alarm |= (buf[18] & 0x07) << 5;
 			}
 			if (i == 5) {
-				s_data.Air_Temperature = sample_avg(temp, 6);
+				s_data.Air_Temperature = (float)sample_avg(temp, 6) / 10;
 				s_data.Humidity = (usint)sample_avg(humi, 6);
 				s_data.Air_Pressure = sample_avg(pres, 6);
 			}
@@ -440,10 +441,13 @@ int Sensor_Sample_Qixiang(void)
 		printf("Sensor: can't create thread.");
 
 	flag = Sensor_Detect_Qixiang();
+	printf("flag = %d\n", flag);
 	if (flag != 0)
 		data_qixiang_flag++;
 
 	memset(&s_data, 0, sizeof(Data_qixiang_t));
+	s_data.Time_Stamp = record.tm;
+	memcpy(s_data.Component_ID, CMA_Env_Parameter.id, 17);
 
 	if ((flag & 0x0019) != 0) {
 		ret = pthread_create(&p1, NULL, sensor_sample_qixiang_1, &flag);
@@ -512,6 +516,7 @@ int Sensor_Sample_Qixiang(void)
 	if (data_qixiang_flag) {
 		get_wind_data(&s_data);
 		record_len = sizeof(struct record_qixiang);
+		memcpy(&record.data, &s_data, sizeof(Data_qixiang_t));
 		if (File_AppendRecord(RECORD_FILE_QIXIANG, (char *)&record, record_len) < 0) {
 			printf("CMD: Recording Qixiang data error.\n");
 		}
@@ -522,7 +527,7 @@ int Sensor_Sample_Qixiang(void)
 		printf("极大风速： %d \n", s_data.Extreme_WindSpeed);
 		printf("最大风速： %d \n", s_data.Max_WindSpeed);
 		printf("标准风速： %d \n", s_data.Standard_WindSpeed);
-		printf("温 度： %d \n", s_data.Air_Temperature);
+		printf("温 度： %f \n", s_data.Air_Temperature);
 		printf("湿 度： %d \n", s_data.Humidity);
 		printf("大气压： %d \n", s_data.Air_Pressure);
 		printf("降雨量： %d \n", s_data.Precipitation);
@@ -535,41 +540,86 @@ int Sensor_Sample_Qixiang(void)
 	return ret;
 }
 
+int Sensor_Sample_TGQingXie(Data_incline_t *data)
+{
+	int ret = -1;
+	byte buf[64];
+	int angle_x, angle_y;
+	struct record_incline record;
+	int record_len = 0;
+
+	memset(&record, 0, sizeof(struct record_incline));
+	record.tm = rtc_get_time();
+	record.data.Time_Stamp = record.tm;
+
+	fprintf(stdout, "CMD: Sample Incline data start.\n");
+
+	data->Time_Stamp = record.tm;
+	memcpy(data->Component_ID, CMA_Env_Parameter.id, 17);
+	memset(buf, 0, 64);
+	angle_x = angle_y = 0;
+	if (Sensor_Can_ReadData(Sensor_CAN_List_Angle[0].addr, buf) == 0) {
+		angle_x = (buf[6] << 8) | buf[7];
+		angle_y = (buf[8] << 8) | buf[9];
+		printf("Sample: angle_x = %d, angle_y = %d\n", angle_x, angle_y);
+
+		data->Angle_X = (float)angle_x / 100;
+		data->Angle_Y = (float)angle_y / 100;
+		record_len = sizeof(struct record_incline);
+		memcpy(&record.data, data, sizeof(Data_incline_t));
+		if (File_AppendRecord(RECORD_FILE_TGQXIE, (char *)&record, record_len) < 0) {
+			fprintf(stderr, "CMD: Recording Incline data error.\n");
+		}
+		printf("Sample Incline Data: \n");
+		printf("顺线倾斜角： %f \n", data->Angle_X);
+		printf("横向倾斜角： %f \n", data->Angle_Y);
+
+		ret = 0;
+	}
+	else
+		fprintf(stdout, "CMD: Incline Sensor is not Online.\n");
+
+	fprintf(stdout, "CMD: Sample Incline data finished.\n");
+
+	return ret;
+}
+
 int Sensor_GetData(byte *buf, int type)
 {
 	byte sensor_buf[MAX_DATA_BUFSIZE];
 	int ret = 0;
 	
+	fprintf(stdout, "Enter func: %s, type = %d \n", __func__, type);
+
 	memset(sensor_buf, 0, MAX_DATA_BUFSIZE);
 	
 	switch (type) {
 	case CMA_MSG_TYPE_DATA_QXENV:
 		{
-			Data_qixiang_t *data = (Data_qixiang_t *)sensor_buf;
+//			Data_qixiang_t *data = (Data_qixiang_t *)sensor_buf;
 			ret = Sensor_Sample_Qixiang();
-			memcpy(&data, &s_data, sizeof(Data_qixiang_t));
-			memcpy(buf, &data, sizeof(Data_qixiang_t));
+			memcpy(buf, &s_data, sizeof(Data_qixiang_t));
 		}
 		break;
 	case CMA_MSG_TYPE_DATA_TGQXIE:
 		{
 			Data_incline_t *data = (Data_incline_t *)sensor_buf;
-
-			memcpy(buf, &data, sizeof(Data_incline_t));
+			ret = Sensor_Sample_TGQingXie(data);
+			memcpy(buf, data, sizeof(Data_incline_t));
 		}
 		break;
 	case CMA_MSG_TYPE_DATA_DDXWFTZ:
 		{
 			Data_vibration_f_t *data = (Data_vibration_f_t *)sensor_buf;
 			
-			memcpy(buf, &data, sizeof(Data_vibration_f_t));
+			memcpy(buf, data, sizeof(Data_vibration_f_t));
 		}
 		break;
 	case CMA_MSG_TYPE_DATA_DDXWFBX:
 		{
 			Data_vibration_w_t *data = (Data_vibration_w_t *)sensor_buf;
 			
-			memcpy(buf, &data, sizeof(Data_vibration_w_t));
+			memcpy(buf, data, sizeof(Data_vibration_w_t));
 		}
 //		f_head.pack_len = sizeof(Data_vibration_w_t); // ? sample number: n
 		break;
@@ -577,42 +627,42 @@ int Sensor_GetData(byte *buf, int type)
 		{
 			Data_conductor_sag_t *data = (Data_conductor_sag_t *)sensor_buf;
 			
-			memcpy(buf, &data, sizeof(Data_conductor_sag_t));
+			memcpy(buf, data, sizeof(Data_conductor_sag_t));
 		}
 		break;
 	case CMA_MSG_TYPE_DATA_DXWD:
 		{
 			Data_line_temperature_t *data = (Data_line_temperature_t *)sensor_buf;
 			
-			memcpy(buf, &data, sizeof(Data_line_temperature_t));
+			memcpy(buf, data, sizeof(Data_line_temperature_t));
 		}
 		break;
 	case CMA_MSG_TYPE_DATA_FUBING:
 		{
 			Data_ice_thickness_t *data = (Data_ice_thickness_t *)sensor_buf;
 			
-			memcpy(buf, &data, sizeof(Data_ice_thickness_t));
+			memcpy(buf, data, sizeof(Data_ice_thickness_t));
 		}
 		break;
 	case CMA_MSG_TYPE_DATA_DXFP:
 		{
 			Data_windage_yaw_t *data = (Data_windage_yaw_t *)sensor_buf;
 			
-			memcpy(buf, &data, sizeof(Data_windage_yaw_t));
+			memcpy(buf, data, sizeof(Data_windage_yaw_t));
 		}
 		break;
 	case CMA_MSG_TYPE_DATA_DXWDTZH:
 		{
 			Data_line_gallop_f_t *data = (Data_line_gallop_f_t *)sensor_buf;
 			
-			memcpy(buf, &data, sizeof(Data_line_gallop_f_t));
+			memcpy(buf, data, sizeof(Data_line_gallop_f_t));
 		}
 		break;
 	case CMA_MSG_TYPE_DATA_DXWDGJ:
 		{
 			Data_gallop_w_t *data = (Data_gallop_w_t *)sensor_buf;
 			
-			memcpy(buf, &data, sizeof(Data_gallop_w_t));
+			memcpy(buf, data, sizeof(Data_gallop_w_t));
 		}
 //		f_head.pack_len = sizeof(Data_gallop_w_t); // ? sample num: n
 		break;
@@ -620,7 +670,7 @@ int Sensor_GetData(byte *buf, int type)
 		{
 			Data_dirty_t *data = (Data_dirty_t *)sensor_buf;
 			
-			memcpy(buf, &data, sizeof(Data_dirty_t));
+			memcpy(buf, data, sizeof(Data_dirty_t));
 		}
 		break;
 	default:
@@ -744,6 +794,8 @@ int Sensor_Can_ReadData(usint addr, byte *buf)
 	byte *pbuf = NULL;
 	int timeout = 2;
 
+//	printf("--------- Enter func: %s -----------\n", __func__);
+
 	if (buf == NULL)
 		return -1;
 
@@ -800,6 +852,8 @@ int Sensor_Can_ReadData(usint addr, byte *buf)
 		printf("CRC check Error.\n");
 		goto err;
 	}
+
+	pthread_mutex_unlock(&can_mutex);
 
 	close(s);
 	return 0;

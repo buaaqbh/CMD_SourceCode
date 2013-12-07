@@ -21,6 +21,7 @@ struct rtc_alarm_dev {
 };
 
 extern struct rtc_alarm_dev sample_dev;
+extern struct rtc_alarm_dev sample_dev_1;
 
 void rtc_trigger_alarm(time_t cur_time);
 int rtc_alarm_init(void);
@@ -29,6 +30,7 @@ int rtc_alarm_add(struct rtc_alarm_dev *timer);
 int rtc_alarm_del(struct rtc_alarm_dev *timer);
 int rtc_alarm_isActive(struct rtc_alarm_dev *timer);
 time_t rtc_get_time(void);
+int rtc_set_time(struct tm *rtc_tm);
 time_t mktime_k(struct tm *tm);
 
 #endif /* RTC_ALARM_H_ */

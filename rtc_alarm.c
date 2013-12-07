@@ -36,7 +36,7 @@ time_t mktime_k(struct tm *tm)
 	unsigned int min = tm->tm_min;
 	unsigned int sec = tm->tm_sec;
 
-	printf("%d, %d, %d, %d, %d, %d\n", year, mon, day, hour, min, sec);
+//	printf("%d, %d, %d, %d, %d, %d\n", year, mon, day, hour, min, sec);
 
 	if (0 >= (int) (mon -= 2)) {    /* 1..12 -> 11,12,1..10 */
 		mon += 12;      /* Puts Feb last since it has leap day */
@@ -65,7 +65,26 @@ time_t rtc_get_time(void)
 		return -1;
 	}
 
-	return mktime((struct tm *)&rtc_tm);
+	return mktime_k((struct tm *)&rtc_tm);
+}
+
+int rtc_set_time(struct tm *rtc_tm)
+{
+	int retval;
+
+	if (rtc_dev_fd == -1)
+		return -1;
+
+	/* Set the RTC time/date */
+	retval = ioctl(rtc_dev_fd, RTC_SET_TIME, rtc_tm);
+	if (retval == -1) {
+		perror("RTC_SET_TIME ioctl");
+		return -1;
+	}
+
+	rtc_alarm_update();
+
+	return 0;
 }
 
 int start_timer_function_thr( void * (*func)(void *) )
@@ -182,11 +201,11 @@ int rtc_alarm_update(void)
 		dev->expect = now + 1;
 		printf("-------------Warning: rtc expect less than now ----------\n");
 	}
-	rtc_tm = (struct rtc_time *)localtime(&dev->expect);
+	rtc_tm = (struct rtc_time *)gmtime(&dev->expect);
 
 	{
 		printf("RTC Now  Tieme: %s", ctime(&now));
-		printf("RTC Next Alarm: %s", asctime(localtime(&dev->expect)));
+		printf("RTC Next Alarm: %s", asctime(gmtime(&dev->expect)));
 	}
 
 	/* Disable alarm interrupts */
