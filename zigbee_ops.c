@@ -14,13 +14,13 @@
 #include "zigbee_ops.h"
 #include "uart_ops.h"
 
-#define  ZIGBEE_UART_NAME 	"/dev/ttymxc2"
+#define  ZIGBEE_UART_NAME 	"/dev/ttymxc1"
 //#define  ZIGBEE_UART_NAME 	"/dev/ttyS0"
 #define  ZIGBEE_UART_SPEED 	9600
 
 static int zigbee_bitrate[] = {9600, 19200, 38400, 57600, 115200};
 
-//#define _DEBUG
+#define _DEBUG
 #ifdef _DEBUG
 static void debug_out(byte *buf, int len)
 {

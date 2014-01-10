@@ -306,6 +306,7 @@ int main(int argc, char *argv[])
 		printf("Zigbee Device Init Error.\n");
 	}
 
+	printf("Connect to server: %s \n", CMA_Env_Parameter.cma_ip);
 	CMA_Env_Parameter.socket_fd = connect_server(CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.cma_port, 0);
 	if (CMA_Env_Parameter.socket_fd < 0) {
 		fprintf(stdout, "CMD: Connect to server error.\n");
@@ -321,6 +322,7 @@ int main(int argc, char *argv[])
 
 	entry = "qixiang:samp_period";
 
+	printf("Set Sampling cycle.\n");
 	/* Main Sampling data loop Timer Init */
 	if ((cycle = Device_getSampling_Cycle(entry)) < 0)
 			cycle = 10;
