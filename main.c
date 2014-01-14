@@ -302,9 +302,9 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	if (Zigbee_Device_Init() < 0) {
-		printf("Zigbee Device Init Error.\n");
-	}
+//	if (Zigbee_Device_Init() < 0) {
+//		printf("Zigbee Device Init Error.\n");
+//	}
 
 	printf("Connect to server: %s \n", CMA_Env_Parameter.cma_ip);
 	CMA_Env_Parameter.socket_fd = connect_server(CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.cma_port, 0);
