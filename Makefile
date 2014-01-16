@@ -37,7 +37,7 @@ all: $(OBJS) $(SER_NAME)
 
 $(SER_NAME):$(OBJS)
 	$(CXX) -o $(SER_NAME)_$(M_DATE) $(OBJS) $(INCLUDE_PATH) $(LIB_PATH) $(LIBS)
-	cp -rPf $(SER_NAME)_$(M_DATE) /home/qinbh/Work/imx/nfsroot
+	cp -rPf $(SER_NAME)_$(M_DATE) /work/nfsroot/walkreader/cma
 
 %.o : %.c
 	$(CXX) -c $(COMPILE_FLAGS) $(INCLUDE_PATH) $< -o $@

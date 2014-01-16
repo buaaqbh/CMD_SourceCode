@@ -277,38 +277,24 @@ int v4l2_init_device (int fd, struct v4l2_pix_format pix, int lu, int co, int sa
 
 	printf("VIDIOC_G_FMT: width = %d, height = %d \n", g_in_width, g_in_height);
 
-#if 1
-	struct v4l2_queryctrl ctrl;
-	ctrl.id = V4L2_CID_CONTRAST;
-//	ctrl.id = V4L2_CID_BRIGHTNESS;
-//	ctrl.id = V4L2_CID_SATURATION;
-	if (-1 == ioctl(fd, VIDIOC_QUERYCTRL, &ctrl)) {
-		if (EINVAL == errno) {
-			fprintf (stderr, "VIDIOC_QUERYCTRL: Video Device is no V4L2 device\n");
-		}
-		else {
-			perror("VIDIOC_QUERYCAP");
-		}
-//		return -1;
-	}
-	fprintf(stdout, "name = %s, type = 0x%x min = %d, max = %d, step = %d, default = %d, flag = 0x%08x\n",
-		ctrl.name, ctrl.type, ctrl.minimum, ctrl.maximum, ctrl.step, ctrl.default_value, ctrl.flags);
-
 	struct v4l2_control ctl_set;
-	ctl_set.id = V4L2_CID_CONTRAST;
-//	ctl_set.id = V4L2_CID_BRIGHTNESS;
-//	ctl_set.id = V4L2_CID_SATURATION;
-	ctl_set.value = 128;
+	ctl_set.id = V4L2_CID_BRIGHTNESS;
+	ctl_set.value = lu;
 	if (-1 == ioctl(fd, VIDIOC_S_CTRL, &ctl_set)) {
-		perror("VIDIOC_S_CTRL");
-		return -1;
+		perror("VIDIOC_QUERYCAP");
 	}
-	if (-1 == ioctl(fd, VIDIOC_G_CTRL, &ctl_set)) {
-		perror("VIDIOC_G_CTRL");
-		return -1;
+
+	ctl_set.id = V4L2_CID_CONTRAST;
+	ctl_set.value = co;
+	if (-1 == ioctl(fd, VIDIOC_S_CTRL, &ctl_set)) {
+		perror("VIDIOC_QUERYCAP");
 	}
-	fprintf(stdout, "id = %d, value = %d\n", ctl_set.id, ctl_set.value);
-#endif
+
+	ctl_set.id = V4L2_CID_SATURATION;
+	ctl_set.value = sa;
+	if (-1 == ioctl(fd, VIDIOC_S_CTRL, &ctl_set)) {
+		perror("VIDIOC_QUERYCAP");
+	}
 
 	if (v4l2_init_mmap(fd) < 0) {
 		fprintf(stderr, "Init mmap error!\n");

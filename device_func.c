@@ -662,7 +662,7 @@ int Device_setServerInfo(Ctl_up_device_t  *up_device)
 int Device_reset(usint type)
 {
 	fprintf(stdout, "Device Reboot, type = %d \n", type);
-//	system("/sbin/reboot");
+	system("/sbin/reboot");
 	return 0;
 }
 

@@ -328,6 +328,7 @@ int CMA_Send_SensorData(int fd, int type, void *data)
 		f_head.pack_len = sizeof(Data_line_temperature_t);
 		break;
 	case CMA_MSG_TYPE_DATA_FUBING:
+	case CMA_MSG_TYPE_CTL_FUBING_PAR:
 		f_head.pack_len = sizeof(Data_ice_thickness_t);
 		break;
 	case CMA_MSG_TYPE_DATA_DXFP:
@@ -481,6 +482,11 @@ static int CMA_Send_RecordingData(int fd, byte type, time_t start, time_t end)
 		filename = RECORD_FILE_TGQXIE;
 		record_len = sizeof(struct record_incline);
 		break;
+	case CMA_MSG_TYPE_DATA_FUBING:
+	case CMA_MSG_TYPE_CTL_FUBING_PAR:
+		filename = RECORD_FILE_FUBING;
+		record_len = sizeof(struct record_fubing);
+		break;
 	case CMA_MSG_TYPE_DATA_DDXWFTZ:
 //		break;
 	case CMA_MSG_TYPE_DATA_DDXWFBX:
@@ -488,8 +494,6 @@ static int CMA_Send_RecordingData(int fd, byte type, time_t start, time_t end)
 	case CMA_MSG_TYPE_DATA_DXHCH:
 //		break;
 	case CMA_MSG_TYPE_DATA_DXWD:
-//		break;
-	case CMA_MSG_TYPE_DATA_FUBING:
 //		break;
 	case CMA_MSG_TYPE_DATA_DXFP:
 	case CMA_MSG_TYPE_CTL_DXFP_PAR:
@@ -507,6 +511,16 @@ static int CMA_Send_RecordingData(int fd, byte type, time_t start, time_t end)
 
 	total = File_GetNumberOfRecords(filename, record_len);
 	if (total == 0) {
+		return 0;
+	}
+
+	if (start == end) {
+		memset(&record, 0, record_len);
+		if (File_GetRecordByIndex(filename, &record, record_len, (total - 1)) == record_len) {
+			CMA_Send_SensorData(fd, type, (record + sizeof(time_t)));
+			if (CMA_Wait_SensorData_Res(fd, type) == 0)
+				fprintf(stdout, "CMD: Send Data reponse OK.\n");
+		}
 		return 0;
 	}
 
@@ -605,6 +619,11 @@ int CMA_SamplePar_SetReq_Response(int fd, byte *rbuf)
 			if (cycle > 0)
 				sample_par->Main_Time = cycle;
 			break;
+		case CMA_MSG_TYPE_CTL_FUBING_PAR:
+			cycle = Device_getSampling_Cycle("fubing:samp_period");
+			if (cycle > 0)
+				sample_par->Main_Time = cycle;
+			break;
 		default:
 			sbuf[0] = 0x00;
 			return -1;
@@ -624,6 +643,12 @@ int CMA_SamplePar_SetReq_Response(int fd, byte *rbuf)
 			if (cycle > 0)
 				Device_setSampling_Cycle("tgqingxie:samp_period", cycle);
 			sample_dev_1.interval = cycle * 60;
+			break;
+		case CMA_MSG_TYPE_CTL_FUBING_PAR:
+			cycle = sample_par->Main_Time;
+			if (cycle > 0)
+				Device_setSampling_Cycle("fubing:samp_period", cycle);
+			sample_dev_2.interval = cycle * 60;
 			break;
 		default:
 			sbuf[0] = 0x00;

@@ -22,6 +22,7 @@ struct rtc_alarm_dev {
 
 extern struct rtc_alarm_dev sample_dev;
 extern struct rtc_alarm_dev sample_dev_1;
+extern struct rtc_alarm_dev sample_dev_2;
 
 void rtc_trigger_alarm(time_t cur_time);
 int rtc_alarm_init(void);

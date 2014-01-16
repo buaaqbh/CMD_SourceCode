@@ -634,6 +634,9 @@ int Sensor_Zigbee_ReadData(byte *buf, int len)
 	if ((fd = Zigbee_Get_Device(ZIGBEE_UART_SPEED)) < 0)
 		return -1;
 
+#ifdef _DEBUG
+		printf("Zigbee Start to Read %d Bytes Data.\n", len);
+#endif
 	memset(rbuf, 0, 256);
 	if ((err = io_readn(fd, rbuf, len, timeout)) != len) {
 		if (err < 0) {
@@ -645,11 +648,19 @@ int Sensor_Zigbee_ReadData(byte *buf, int len)
 		Zigbee_Release_Device(fd);
 		return -1;
 	}
+	else {
+#ifdef _DEBUG
+		printf("Zigbee Read Data: ");
+		debug_out(rbuf, len);
+#endif
+	}
 
 	if ((memcmp(rbuf, res, 4)) || (memcmp(rbuf + 8, res + 8, 5)))
 		err = -1;
-	else
+	else {
+		memcpy(buf, rbuf, len);
 		err = 0;
+	}
 
 	Zigbee_Release_Device(fd);
 

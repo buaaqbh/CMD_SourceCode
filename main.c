@@ -23,6 +23,7 @@ pthread_spinlock_t spinlock;
 volatile int System_Sleep_Enable = 0;
 struct rtc_alarm_dev sample_dev;
 struct rtc_alarm_dev sample_dev_1;
+struct rtc_alarm_dev sample_dev_2;
 static volatile int CMD_status_regist = 0;
 pthread_mutex_t com_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -210,6 +211,33 @@ void *Sensor_Sample_loop_TGQingXie(void * arg)
 	return 0;
 }
 
+void *Sensor_Sample_loop_FuBing(void * arg)
+{
+	byte data_buf[MAX_DATA_BUFSIZE];
+	int ret;
+
+	printf("Enter func: %s\n", __func__);
+
+	system_sleep_enable(0);
+
+	memset(data_buf, 0, MAX_DATA_BUFSIZE);
+	if (Sensor_GetData(data_buf, CMA_MSG_TYPE_DATA_FUBING) < 0) {
+		fprintf(stderr, "CMD: Sample Env Data error.\n");
+	}
+	else if (CMA_Env_Parameter.socket_fd > 0) {
+		ret = CMA_Send_SensorData(CMA_Env_Parameter.socket_fd, CMA_MSG_TYPE_DATA_FUBING, data_buf);
+		if (ret < 0) {
+			fprintf(stderr, "CMD: Socket Send Env Data error.\n");
+		}
+	}
+
+	system_sleep_enable(1);
+
+	alarm(2);
+
+	return 0;
+}
+
 void enter_sleep(int sig)
 {
 //	char *cmd_shell = "echo mem >/sys/power/state";
@@ -302,9 +330,16 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-//	if (Zigbee_Device_Init() < 0) {
-//		printf("Zigbee Device Init Error.\n");
-//	}
+	if (Zigbee_Device_Init() < 0) {
+		printf("Zigbee Device Init Error.\n");
+	}
+
+	/*
+	{
+		byte buf[16];
+		Sensor_Zigbee_ReadData(buf, 13);
+	}
+	 */
 
 	printf("Connect to server: %s \n", CMA_Env_Parameter.cma_ip);
 	CMA_Env_Parameter.socket_fd = connect_server(CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.cma_port, 0);
@@ -355,6 +390,21 @@ int main(int argc, char *argv[])
 	printf("TGQingXie Expect: %s", asctime(tm));
 	sample_dev_1.expect = expect;
 	rtc_alarm_add(&sample_dev_1);
+
+	entry = "fubing:samp_period";
+	if ((cycle = Device_getSampling_Cycle(entry)) < 0)
+			cycle = 60;
+	memset(&sample_dev_2, 0, sizeof(struct rtc_alarm_dev));
+	sample_dev_2.func = Sensor_Sample_loop_FuBing;
+	sample_dev_2.repeat = 1;
+	sample_dev_2.interval = cycle * 60; /* Sampling Cycle */
+	now = rtc_get_time();
+	tm = gmtime(&now);
+	expect = now + 10;
+	tm = gmtime(&expect);
+	printf("FuBing Expect: %s", asctime(tm));
+	sample_dev_2.expect = expect;
+	rtc_alarm_add(&sample_dev_2);
 
 	rtc_alarm_update();
 

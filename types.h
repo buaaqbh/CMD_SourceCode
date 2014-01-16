@@ -235,11 +235,11 @@ typedef struct _data_str_ice_thickness
 	byte 	Component_ID[17];
 	int 	Time_Stamp;
 	usint 	Alerm_Flag;
-	int 	Equal_IceThickness;
-	int 	Tension;
-	int 	Tension_Difference;
-	int 	Windage_Yaw_Angle;
-	int 	Deflection_Angle;
+	float 	Equal_IceThickness;
+	float 	Tension;
+	float 	Tension_Difference;
+	float 	Windage_Yaw_Angle;
+	float 	Deflection_Angle;
 	int 	Reserve1;
 	int 	Reserve2;
 } Data_ice_thickness_t;
@@ -388,6 +388,7 @@ typedef struct _alarm_value {
 
 #define RECORD_FILE_QIXIANG 	"/CMD_Data/record_qixiang.dat"
 #define RECORD_FILE_TGQXIE 		"/CMD_Data/record_tgqxie.dat"
+#define RECORD_FILE_FUBING 		"/CMD_Data/record_fubing.dat"
 
 struct record_qixiang {
 	time_t tm;
@@ -398,6 +399,12 @@ struct record_incline {
 	time_t tm;
 	Data_incline_t data;
 };
+
+struct record_fubing {
+	time_t tm;
+	Data_ice_thickness_t data;
+};
+
 
 extern unsigned short RTU_CRC(unsigned char *puchMsg, unsigned short usDataLen);
 

@@ -68,11 +68,11 @@ static struct can_device Sensor_CAN_List_Qixiang[] = {
 	},
 	{
 		.type = SENSOR_WSPEED,
-		.addr = 0x0014,
+		.addr = 0x000f,
 	},
 	{
 		.type = SENSOR_WDIRECTION,
-		.addr = 0x0018,
+		.addr = 0x000f,
 	},
 	{
 		.type = SENSOR_RAIN,
@@ -371,25 +371,16 @@ void *sensor_sample_windAvg(void * arg)
 			memset(buf, 0, 64);
 			if (Sensor_Can_ReadData(Sensor_CAN_List_Qixiang[1].addr, buf) == 0) {
 				speed[i] = (buf[6] << 8) | buf[7];
+				speed_d[i] = (buf[8] << 8) | buf[9];
 				printf("Sample: i = %d, state = 0x%x\n", i, buf[18]);
-				printf("Sample: speed = %d\n", speed[i]);
+				printf("Sample: speed = %d, speed_d = %d\n", speed[i], speed_d[i]);
 			}
 			if (i == 9) {
 				record.speed_avg = slid_avg(speed, 10, 0.3, 0);
-			}
-		}
-
-		if ((flag & 0x4) == 0x04) {
-			memset(buf, 0, 64);
-			if (Sensor_Can_ReadData(Sensor_CAN_List_Qixiang[2].addr, buf) == 0) {
-				speed_d[i] = (buf[6] << 8) | buf[7];
-				printf("Sample: i = %d, state = 0x%x\n", i, buf[18]);
-				printf("Sample: speed_d = %d\n", speed_d[i]);
-			}
-			if (i == 9) {
 				record.speed_d_avg = slid_avg(speed_d, 10, 0.3, 1);
 			}
 		}
+
 		if (i < 9)
 			sleep(60);
 	}
@@ -412,6 +403,9 @@ void *sensor_qixiang_zigbee(void * arg)
 		s_data.Precipitation = (buf[4] << 8) | buf[5];
 		s_data.Precipitation_Intensity = (buf[6] << 8) | buf[7];
 		data_qixiang_flag++;
+	}
+	else {
+		fprintf(stderr, "Sensor: read zigbee data error.\n");
 	}
 
 	return 0;
@@ -456,7 +450,7 @@ int Sensor_Sample_Qixiang(void)
 		p1_wait = 1;
 	}
 
-	if ((flag & 0x0006) == 0)
+	if ((flag & 0x0004) == 0)
 		rtc_alarm_del(&wind_avg);
 	if ((flag & 0x0002) == 0)
 		rtc_alarm_del(&wind_sec);
@@ -468,7 +462,7 @@ int Sensor_Sample_Qixiang(void)
 			wind_avg.repeat = 1;
 			wind_avg.interval = 60 * 60;
 			now = rtc_get_time();
-			tm = localtime(&now);
+			tm = gmtime(&now);
 			printf("WindAverage: Now, %s", asctime(tm));
 			tm->tm_min = 50;
 			tm->tm_sec = 0;
@@ -477,7 +471,7 @@ int Sensor_Sample_Qixiang(void)
 			else
 				expect = mktime(tm) + 60 * 60;
 			wind_avg.expect = expect;
-			tm = localtime(&expect);
+			tm = gmtime(&expect);
 			printf("WindAverage: Expect, %s", asctime(tm));
 
 			rtc_alarm_add(&wind_avg);
@@ -489,12 +483,11 @@ int Sensor_Sample_Qixiang(void)
 			wind_sec.repeat = 1;
 			wind_sec.interval = 2 * 60;
 			now = rtc_get_time();
-			tm = localtime(&now);
+			tm = gmtime(&now);
 			printf("WindSpeed: Now, %s", asctime(tm));
-			expect = now - tm->tm_sec - (tm->tm_min % 10) * 60;
-			expect += 10 * 60;
+			expect = now - tm->tm_sec - (tm->tm_min / 2 * 2 + 2) * 60;
 			wind_sec.expect = expect;
-			tm = localtime(&expect);
+			tm = gmtime(&expect);
 			printf("WindSpeed: Expect, %s", asctime(tm));
 
 			rtc_alarm_add(&wind_sec);
@@ -584,6 +577,71 @@ int Sensor_Sample_TGQingXie(Data_incline_t *data)
 	return ret;
 }
 
+int Sensor_Sample_FuBing(Data_ice_thickness_t *data)
+{
+	int ret = -1;
+	byte buf[64];
+	int force, angle_x, angle_y, wav_cycle, wav_x, wav_y;
+	struct record_fubing record;
+	int record_len = 0;
+	int s_num = sizeof(Sensor_CAN_List_PullForce) / sizeof(struct can_device);
+	int i;
+
+	memset(&record, 0, sizeof(struct record_fubing));
+	record.tm = rtc_get_time();
+	record.data.Time_Stamp = record.tm;
+
+	fprintf(stdout, "CMD: Sample Fu Bing data start.\n");
+
+	data->Time_Stamp = record.tm;
+	memcpy(data->Component_ID, CMA_Env_Parameter.id, 17);
+	force = angle_x = angle_y = wav_cycle = wav_x = wav_y = 0;
+
+	for (i = 0; i < s_num; i++) {
+		memset(buf, 0, 64);
+		if (Sensor_Can_ReadData(Sensor_CAN_List_PullForce[i].addr, buf) == 0) {
+			force = (buf[6] << 8) | buf[7];
+			angle_x = (buf[8] << 8) | buf[9];
+			angle_y = (buf[10] << 8) | buf[11];
+			wav_cycle = (buf[12] << 8) | buf[13];
+			wav_x = (buf[14] << 8) | buf[15];
+			wav_y = (buf[16] << 8) | buf[17];
+
+			printf("Sample: force = %d, angle_x = %d, angle_y = %d\n", force, angle_x, angle_y);
+			printf("Sample: wav_cycle = %d, wav_x = %d, wav_y = %d\n", wav_cycle, wav_x, wav_y);
+
+			ret = 0;
+		}
+		else
+			fprintf(stdout, "CMD: FuBing %d Sensor is not Online.\n", i);
+	}
+
+	if (ret == 0) {
+		data->Tension = force;
+		data->Windage_Yaw_Angle = angle_x;
+		data->Deflection_Angle = angle_y;
+		data->Tension_Difference = wav_cycle;
+		data->Reserve1 = wav_x;
+		data->Reserve2 = wav_y;
+
+		record_len = sizeof(struct record_incline);
+		memcpy(&record.data, data, sizeof(Data_ice_thickness_t));
+		if (File_AppendRecord(RECORD_FILE_FUBING, (char *)&record, record_len) < 0) {
+			fprintf(stderr, "CMD: Recording Incline data error.\n");
+		}
+		printf("Sample Fubing Data: \n");
+		printf("等值覆冰厚度： %f \n", data->Equal_IceThickness);
+		printf("综合悬挂载荷： %f \n", data->Tension);
+		printf("不均衡张力差： %f \n", data->Tension_Difference);
+		printf("绝缘子串风偏角： %f \n", data->Windage_Yaw_Angle);
+		printf("绝缘子串倾斜角： %f \n", data->Deflection_Angle);
+	}
+
+	fprintf(stdout, "CMD: Sample Fubing data finished.\n");
+
+	return ret;
+}
+
 int Sensor_GetData(byte *buf, int type)
 {
 	byte sensor_buf[MAX_DATA_BUFSIZE];
@@ -640,7 +698,7 @@ int Sensor_GetData(byte *buf, int type)
 	case CMA_MSG_TYPE_DATA_FUBING:
 		{
 			Data_ice_thickness_t *data = (Data_ice_thickness_t *)sensor_buf;
-			
+			ret = Sensor_Sample_FuBing(data);
 			memcpy(buf, data, sizeof(Data_ice_thickness_t));
 		}
 		break;
@@ -959,7 +1017,7 @@ int Camera_GetImages(char *ImageName, byte presetting, byte channel)
 		par.Saturation = 50;
 	}
 
-	ret = v4l2_capture_image (ImageName, 640, 480, par.Luminance, par.Contrast, par.Saturation);
+	ret = v4l2_capture_image (ImageName, 720, 576, par.Luminance, par.Contrast, par.Saturation);
 	if (ret < 0) {
 		fprintf(stderr, "CMD: Capture an Image error.\n");
 		return -1;
@@ -974,6 +1032,12 @@ int Camera_GetImages(char *ImageName, byte presetting, byte channel)
 	if (par.Resolution == 1) {
 		memset(cmdshell, 0, 128);
 		sprintf(cmdshell, "convert -resize 320x240! %s %s", ImageName, ImageName);
+		system(cmdshell);
+	}
+
+	if (par.Resolution == 2) {
+		memset(cmdshell, 0, 128);
+		sprintf(cmdshell, "convert -resize 640x480! %s %s", ImageName, ImageName);
 		system(cmdshell);
 	}
 
