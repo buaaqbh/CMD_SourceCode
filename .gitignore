@@ -17,4 +17,11 @@
 *.out
 *.app
 
-cma_app
+*.swp
+*.cfg
+
+.cproject
+.project
+.settings/
+
+CMD_Application
