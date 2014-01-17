@@ -505,7 +505,7 @@ int Sensor_Sample_Qixiang(void)
 	if (ret != 0)
 		printf("CMD: can't join with p2 thread.");
 
-	data_qixiang_flag = 1;
+//	data_qixiang_flag = 1;
 	if (data_qixiang_flag) {
 		get_wind_data(&s_data);
 		record_len = sizeof(struct record_qixiang);

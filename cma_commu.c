@@ -347,14 +347,100 @@ int CMA_Send_SensorData(int fd, int type, void *data)
 		printf("Invalid Sensor tyep.\n");
 		break;
 	}
-	
-//	if (Sensor_GetData(data_buf, type) < 0) {
-//		printf("Get Sensor data error.\n");
-//		return -1;
-//	}
 
 	if (Commu_SendPacket(fd, &f_head, (byte *)data) < 0)
 		return -1;
+
+	return 0;
+}
+
+int CMA_Check_Send_SensorData(int fd, int type)
+{
+	byte record[256];
+	int total = 0;
+	int record_len;
+	char *filename = NULL;
+	int i, flag = 0;
+	time_t now, t;
+
+	switch (type) {
+	case CMA_MSG_TYPE_DATA_QXENV:
+	case CMA_MSG_TYPE_CTL_QX_PAR:
+		filename = RECORD_FILE_QIXIANG;
+		record_len = sizeof(struct record_qixiang);
+		break;
+	case CMA_MSG_TYPE_DATA_TGQXIE:
+	case CMA_MSG_TYPE_CTL_TGQX_PAR:
+		filename = RECORD_FILE_TGQXIE;
+		record_len = sizeof(struct record_incline);
+		break;
+	case CMA_MSG_TYPE_DATA_FUBING:
+	case CMA_MSG_TYPE_CTL_FUBING_PAR:
+		filename = RECORD_FILE_FUBING;
+		record_len = sizeof(struct record_fubing);
+		break;
+	case CMA_MSG_TYPE_DATA_DDXWFTZ:
+//		break;
+	case CMA_MSG_TYPE_DATA_DDXWFBX:
+//		break;
+	case CMA_MSG_TYPE_DATA_DXHCH:
+//		break;
+	case CMA_MSG_TYPE_DATA_DXWD:
+//		break;
+	case CMA_MSG_TYPE_DATA_DXFP:
+	case CMA_MSG_TYPE_CTL_DXFP_PAR:
+//		break;
+	case CMA_MSG_TYPE_DATA_DXWDTZH:
+//		break;
+	case CMA_MSG_TYPE_DATA_DXWDGJ:
+//		break;
+	case CMA_MSG_TYPE_DATA_XCHWS:
+//		break;
+	default:
+		printf("Invalid Sensor tyep.\n");
+		return -1;
+	}
+
+	total = File_GetNumberOfRecords(filename, record_len);
+	now = rtc_get_time();
+	while (total > 0) {
+		memset(&record, 0, record_len);
+		memset(&t, 0, sizeof(time_t));
+		if (File_GetRecordByIndex(filename, &record, record_len, 0) == record_len) {
+			memcpy(&t, &record, sizeof(time_t));
+			if ((now - t) > 50*24*60*60) {
+				File_DeleteRecordByIndex(filename, record_len, 0);
+				total = total -1;
+			}
+			else
+				break;
+		}
+		else
+			break;
+	}
+
+	if (total == 0) {
+		return 0;
+	}
+
+	for (i = (total - 1); i >= 0; i--) {
+		memset(&record, 0, record_len);
+		if (File_GetRecordByIndex(filename, &record, record_len, i) == record_len) {
+			memcpy(&flag, (&record + record_len - 4), 4);
+			printf("CMD: Send Flag = %d, filename = %s, index = %d\n", flag, filename, i);
+			if (flag == 0) {
+				CMA_Send_SensorData(fd, type, (record + sizeof(time_t)));
+				if (CMA_Wait_SensorData_Res(fd, type) == 0) {
+					fprintf(stdout, "CMD: Send Data reponse OK.\n");
+					flag = 0xff;
+					memcpy((&record + record_len - 4), &flag, 4);
+					File_UpdateRecordByIndex(filename, &record, record_len, i);
+				}
+			}
+//			else
+//				break;
+		}
+	}
 
 	return 0;
 }

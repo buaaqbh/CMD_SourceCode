@@ -157,7 +157,7 @@ void *socket_heartbeat_func(void * arg)
 	return 0;
 }
 
-void *main_sample_loop(void * arg)
+void *Sensor_Sample_loop_QiXiang(void * arg)
 {
 	byte data_buf[MAX_DATA_BUFSIZE];
 	int ret;
@@ -171,7 +171,8 @@ void *main_sample_loop(void * arg)
 		fprintf(stderr, "CMD: Sample Env Data error.\n");
 	}
 	else if (CMA_Env_Parameter.socket_fd > 0) {
-		ret = CMA_Send_SensorData(CMA_Env_Parameter.socket_fd, CMA_MSG_TYPE_DATA_QXENV, data_buf);
+//		ret = CMA_Send_SensorData(CMA_Env_Parameter.socket_fd, CMA_MSG_TYPE_DATA_QXENV, data_buf);
+		ret = CMA_Check_Send_SensorData(CMA_Env_Parameter.socket_fd, CMA_MSG_TYPE_DATA_QXENV);
 		if (ret < 0) {
 			fprintf(stderr, "CMD: Socket Send Env Data error.\n");
 		}
@@ -198,7 +199,8 @@ void *Sensor_Sample_loop_TGQingXie(void * arg)
 		fprintf(stderr, "CMD: Sample Env Data error.\n");
 	}
 	else if (CMA_Env_Parameter.socket_fd > 0) {
-		ret = CMA_Send_SensorData(CMA_Env_Parameter.socket_fd, CMA_MSG_TYPE_DATA_TGQXIE, data_buf);
+//		ret = CMA_Send_SensorData(CMA_Env_Parameter.socket_fd, CMA_MSG_TYPE_DATA_TGQXIE, data_buf);
+		ret = CMA_Check_Send_SensorData(CMA_Env_Parameter.socket_fd, CMA_MSG_TYPE_DATA_TGQXIE);
 		if (ret < 0) {
 			fprintf(stderr, "CMD: Socket Send Env Data error.\n");
 		}
@@ -225,7 +227,8 @@ void *Sensor_Sample_loop_FuBing(void * arg)
 		fprintf(stderr, "CMD: Sample Env Data error.\n");
 	}
 	else if (CMA_Env_Parameter.socket_fd > 0) {
-		ret = CMA_Send_SensorData(CMA_Env_Parameter.socket_fd, CMA_MSG_TYPE_DATA_FUBING, data_buf);
+//		ret = CMA_Send_SensorData(CMA_Env_Parameter.socket_fd, CMA_MSG_TYPE_DATA_FUBING, data_buf);
+		ret = CMA_Check_Send_SensorData(CMA_Env_Parameter.socket_fd, CMA_MSG_TYPE_DATA_FUBING);
 		if (ret < 0) {
 			fprintf(stderr, "CMD: Socket Send Env Data error.\n");
 		}
@@ -362,7 +365,7 @@ int main(int argc, char *argv[])
 	if ((cycle = Device_getSampling_Cycle(entry)) < 0)
 			cycle = 10;
 	memset(&sample_dev, 0, sizeof(struct rtc_alarm_dev));
-	sample_dev.func = main_sample_loop;
+	sample_dev.func = Sensor_Sample_loop_QiXiang;
 	sample_dev.repeat = 1;
 	sample_dev.interval = cycle * 60; /* Sampling Cycle */
 	now = rtc_get_time();

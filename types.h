@@ -393,16 +393,19 @@ typedef struct _alarm_value {
 struct record_qixiang {
 	time_t tm;
 	Data_qixiang_t data;
+	int send_flag;
 };
 
 struct record_incline {
 	time_t tm;
 	Data_incline_t data;
+	int send_flag;
 };
 
 struct record_fubing {
 	time_t tm;
 	Data_ice_thickness_t data;
+	int send_flag;
 };
 
 

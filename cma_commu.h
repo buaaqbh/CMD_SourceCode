@@ -33,6 +33,8 @@ int Commu_GetPacket_Udp(int fd, int localport, byte *rbuf, int len, int timeout)
 int Commu_SendPacket(int fd, frame_head_t *head, byte *data);
 
 int CMA_Send_SensorData(int fd, int type, void *data);
+int CMA_Wait_SensorData_Res(int fd, int type);
+int CMA_Check_Send_SensorData(int fd, int type);
 int CMA_Server_Process(int fd, byte *rbuf);
 int CMA_Time_SetReq_Response(int fd, byte *rbuf);
 int CMA_NetAdapter_SetReq_Response(int fd, byte *rbuf);
