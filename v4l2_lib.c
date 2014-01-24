@@ -279,19 +279,28 @@ int v4l2_init_device (int fd, struct v4l2_pix_format pix, int lu, int co, int sa
 
 	struct v4l2_control ctl_set;
 	ctl_set.id = V4L2_CID_BRIGHTNESS;
-	ctl_set.value = lu;
+	if ((lu >= 0) && (lu <= 100))
+		ctl_set.value = lu * 256 / 100;
+	else
+		ctl_set.value = 128;
 	if (-1 == ioctl(fd, VIDIOC_S_CTRL, &ctl_set)) {
 		perror("VIDIOC_QUERYCAP");
 	}
 
 	ctl_set.id = V4L2_CID_CONTRAST;
-	ctl_set.value = co;
+	if ((co >= 0) && (co <= 100))
+		ctl_set.value = co * 256 / 100;
+	else
+		ctl_set.value = 128;
 	if (-1 == ioctl(fd, VIDIOC_S_CTRL, &ctl_set)) {
 		perror("VIDIOC_QUERYCAP");
 	}
 
 	ctl_set.id = V4L2_CID_SATURATION;
-	ctl_set.value = sa;
+	if ((sa >= 0) && (sa <= 100))
+		ctl_set.value = sa * 256 / 100;
+	else
+		ctl_set.value = 128;
 	if (-1 == ioctl(fd, VIDIOC_S_CTRL, &ctl_set)) {
 		perror("VIDIOC_QUERYCAP");
 	}
@@ -458,6 +467,7 @@ static void process_image(const void* p, int width, int height, char *jpegFilena
 	unsigned char* src = (unsigned char*)p;
 	unsigned char* dst = malloc(width*height*3*sizeof(char));
 
+//	printf("Enter func: %s\n", __func__);
 	YUV422toRGB888(width, height, src, dst);
 
 	// write jpeg
@@ -473,13 +483,14 @@ int v4l2_read_frame (int fd, int width, int height, char *jpegFilename)
 
 	CLEAR (buf);
 
+//	printf("Enter func: %s\n", __func__);
 	buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	buf.memory = V4L2_MEMORY_MMAP;
 
 	if (-1 == xioctl (fd, VIDIOC_DQBUF, &buf)) {
 		switch (errno) {
 		case EAGAIN:
-			return 0;
+			return EAGAIN;
 		case EIO:
 		/* Could ignore EIO, see spec. */
 		/* fall through */

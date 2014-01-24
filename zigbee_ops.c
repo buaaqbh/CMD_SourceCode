@@ -286,7 +286,7 @@ int Zigbee_Set_type(int fd, int type)
 	if (zigbee_send_cmd(fd, cmd) < 0)
 		return -1;
 
-	if ((err = io_readn(fd, rbuf, 8, 5)) != 8) {
+	if ((err = io_readn(fd, rbuf, 8, 10)) != 8) {
 		if (err < 0) {
 			perror("read uart");
 		}
@@ -583,6 +583,7 @@ int Zigbee_Device_Init(void)
 	if ((fd = Zigbee_Get_Device(ZIGBEE_UART_SPEED)) < 0)
 		return -1;
 
+
 	bitrate = Zigbee_Get_BitRate(fd);
 	printf("Zigbee Get Bitrate: %d .\n", bitrate);
 
@@ -593,7 +594,7 @@ int Zigbee_Device_Init(void)
 		uart_set_speed(fd, 9600);
 	}
 
-	if (Zigbee_Get_type(fd) != 0) {
+	if (Zigbee_Get_type(fd) != type) {
 		/* Set Zigbee to Coordinator Mode */
 		if(Zigbee_Set_type(fd, type) < 0)
 			return -1;

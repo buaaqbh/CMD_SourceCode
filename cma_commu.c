@@ -166,9 +166,11 @@ int Commu_SendPacket(int fd, frame_head_t *head, byte *data)
 	}
 
 	ret = socket_send(fd, sbuf, size, timeout);
-//	printf("ret = %d, size = %d\n", ret, size);
-	if (ret < 0)
+//	printf("Socket Send Data: ret = %d, size = %d\n", ret, size);
+	if (ret <= 0) {
+		printf("Send Package: send error.\n");
 		return -1;
+	}
 
 	return 0;
 }
@@ -330,6 +332,7 @@ int CMA_Send_SensorData(int fd, int type, void *data)
 	case CMA_MSG_TYPE_DATA_FUBING:
 	case CMA_MSG_TYPE_CTL_FUBING_PAR:
 		f_head.pack_len = sizeof(Data_ice_thickness_t);
+		f_head.msg_type = CMA_MSG_TYPE_DATA_FUBING;
 		break;
 	case CMA_MSG_TYPE_DATA_DXFP:
 		f_head.pack_len = sizeof(Data_windage_yaw_t);
@@ -348,10 +351,25 @@ int CMA_Send_SensorData(int fd, int type, void *data)
 		break;
 	}
 
-	if (Commu_SendPacket(fd, &f_head, (byte *)data) < 0)
+	if (Commu_SendPacket(fd, &f_head, (byte *)data) < 0) {
+		fprintf(stderr, "CMD: Socket Send Data error.\n");
 		return -1;
+	}
 
 	return 0;
+}
+
+static int CMD_WaitStatus_Res(int timeout)
+{
+	while ((CMD_Response_data == -1) && timeout) {
+		sleep(1);
+		timeout--;
+	}
+
+	if (timeout == 0)
+		return -1;
+	else
+		return CMD_Response_data;
 }
 
 int CMA_Check_Send_SensorData(int fd, int type)
@@ -424,17 +442,28 @@ int CMA_Check_Send_SensorData(int fd, int type)
 	}
 
 	for (i = (total - 1); i >= 0; i--) {
+//		printf("total = %d, i = %d\n", total, i);
 		memset(&record, 0, record_len);
 		if (File_GetRecordByIndex(filename, &record, record_len, i) == record_len) {
-			memcpy(&flag, (&record + record_len - 4), 4);
-			printf("CMD: Send Flag = %d, filename = %s, index = %d\n", flag, filename, i);
+//			printf("filename = %s, record_len = %d\n", filename, record_len);
+			memcpy(&flag, ((byte *)&record + (record_len - 4)), 4);
 			if (flag == 0) {
-				CMA_Send_SensorData(fd, type, (record + sizeof(time_t)));
-				if (CMA_Wait_SensorData_Res(fd, type) == 0) {
+				if (CMA_Send_SensorData(fd, type, (record + sizeof(time_t))) < 0)
+					continue;
+				CMD_Response_data = -1;
+				if (CMD_WaitStatus_Res(10) == 0xff) {
+//				if (CMA_Wait_SensorData_Res(fd, type) == 0) {
 					fprintf(stdout, "CMD: Send Data reponse OK.\n");
 					flag = 0xff;
-					memcpy((&record + record_len - 4), &flag, 4);
+					memcpy(((byte *)&record + record_len - 4), &flag, 4);
 					File_UpdateRecordByIndex(filename, &record, record_len, i);
+					/*
+					File_GetRecordByIndex(filename, &record, record_len, i);
+					if (type == CMA_MSG_TYPE_DATA_TGQXIE) {
+						struct record_incline *p = (struct record_incline *)&record;
+						printf("After Send flag = %d \n", p->send_flag);
+					}
+					*/
 				}
 			}
 //			else
@@ -934,7 +963,7 @@ int CMA_Request_LostPackage(int fd, byte *rbuf, const char *bitmap)
 			return -1;
 
 		printf("---------- Get Software Upgrade Lost Packages --------------\n");
-		num = Commu_GetPacket(-1, rbuf, MAX_COMBUF_SIZE, 3);
+		num = Commu_GetPacket(CMA_Env_Parameter.socket_fd, rbuf, MAX_COMBUF_SIZE, 3);
 		if (num > 0) {
 			p_head = (frame_head_t *)rbuf;
 			if (p_head->msg_type == CMA_MSG_TYPE_CTL_UPGRADE_DATA) {
@@ -1205,7 +1234,7 @@ int CMA_Image_SendRequest(int fd, char *imageName, byte channel, byte presetting
 	for (i = 0; i < 5; i++) {
 		printf("---------- Get Image Request Packages --------------\n");
 		memset(rbuf, 0, MAX_COMBUF_SIZE);
-		Commu_GetPacket(fd, rbuf, MAX_COMBUF_SIZE, 3);
+		Commu_GetPacket(fd, rbuf, MAX_COMBUF_SIZE, 1);
 		if (memcmp(rbuf, &f_head, sizeof(frame_head_t)) == 0) {
 			if (memcmp((rbuf +  sizeof(frame_head_t)), &req, sizeof(Send_image_req_t)) == 0)
 				break;
@@ -1227,13 +1256,14 @@ int CMA_Image_SendImageFile(int fd, char *ImageFile, byte channel, byte presetti
 {
 	frame_head_t f_head;
 	frame_head_t *p_head;
-	byte sbuf[MAX_DATA_BUFSIZE];
+	byte sbuf[CMA_MSG_MAX_LEN];
 	int image_fd;
 	int size = 0;
 	usint pkg_num = 0;
 	byte data[IMAGE_SUBDATA_LEN];
 	byte rbuf[MAX_COMBUF_SIZE];
-	int i, ret;
+	int i;
+	int ret = -1;
 
 	if (File_Exist(ImageFile) == 0)
 		return -1;
@@ -1246,7 +1276,7 @@ int CMA_Image_SendImageFile(int fd, char *ImageFile, byte channel, byte presetti
 		return -1;
 
 	pkg_num = (size + IMAGE_SUBDATA_LEN - 1) / IMAGE_SUBDATA_LEN;
-	printf("Send Image: package num = %d, size = %d\n", pkg_num, size);
+	printf("Send Image: file = %s, package num = %d, size = %d\n", ImageFile, pkg_num, size);
 
 	memset(&f_head, 0, sizeof(frame_head_t));
 
@@ -1263,19 +1293,19 @@ int CMA_Image_SendImageFile(int fd, char *ImageFile, byte channel, byte presetti
 	for (i = 1; i <= pkg_num; i++) {
 		memset(data, 0, IMAGE_SUBDATA_LEN);
 		if ((ret = read(image_fd, &data, IMAGE_SUBDATA_LEN)) <= 0) {
-			fprintf(stderr, "CMD: Read Image file error.\n");
+			fprintf(stderr, "CMD: Read Image file: %s error.\n", ImageFile);
 			break;
 		}
 
 		memcpy((sbuf + 4), &i, 2);
-		memcpy((sbuf + 6), data, ret);
+		memmove((void *)(sbuf + 6), (void *)data, ret);
 
 		f_head.pack_len = 6 + ret;
 
 		printf("Send Image: i = %d, len = %d, fd = %d\n", i, ret, fd);
 		if (Commu_SendPacket(fd, &f_head, sbuf) < 0)
 			return -1;
-		usleep(20000);
+		usleep(40000);
 	}
 
 	sleep(2);
@@ -1303,7 +1333,7 @@ int CMA_Image_SendImageFile(int fd, char *ImageFile, byte channel, byte presetti
 int CMA_Image_SendImageLost(int fd, char *ImageFile, byte *rbuf)
 {
 	frame_head_t f_head;
-	byte sbuf[MAX_DATA_BUFSIZE];
+	byte sbuf[CMA_MSG_MAX_LEN];
 	int image_fd;
 	int size = 0;
 	usint pkg_num = 0;
@@ -1327,6 +1357,7 @@ int CMA_Image_SendImageLost(int fd, char *ImageFile, byte *rbuf)
 	if ((image_fd = File_Open(ImageFile)) < 0)
 		return -1;
 
+	pkg_num = (size + IMAGE_SUBDATA_LEN - 1) / IMAGE_SUBDATA_LEN;
 	memset(&f_head, 0, sizeof(frame_head_t));
 
 	f_head.head = 0x5aa5;
@@ -1341,10 +1372,12 @@ int CMA_Image_SendImageLost(int fd, char *ImageFile, byte *rbuf)
 
 	for (i = 0; i < total; i++) {
 		memset(data, 0, IMAGE_SUBDATA_LEN);
-		index = (index_buf[0] << 8) | index_buf[1];
+//		index = (index_buf[0] << 8) | index_buf[1];
+		index = (index_buf[1] << 8) | index_buf[0];
+		printf("Lost index = %d, pkg_num = %d\n", index, pkg_num);
 		lseek(image_fd, ((index - 1) * IMAGE_SUBDATA_LEN), SEEK_SET);
 		if ((ret = read(image_fd, &data, IMAGE_SUBDATA_LEN)) <= 0) {
-			fprintf(stderr, "CMD: Read Image file error.\n");
+			fprintf(stderr, "CMD: Read Image file error, file = %s.\n", ImageFile);
 			break;
 		}
 
@@ -1356,7 +1389,7 @@ int CMA_Image_SendImageLost(int fd, char *ImageFile, byte *rbuf)
 		printf("Send Lost Image: total = %d, index = %d, len = %d\n", total, index, ret);
 		if (Commu_SendPacket(fd, &f_head, sbuf) < 0)
 			return -1;
-		usleep(20000);
+		usleep(40000);
 
 		index_buf += 2;
 	}

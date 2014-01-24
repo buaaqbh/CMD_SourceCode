@@ -33,7 +33,7 @@ typedef struct _ServerEnv {
 typedef void * (*thrFunc)(void * arg);
 
 int start_server(int localport, thrFunc func);
-int connect_server( char *destIp, int destPort, int udp);
+int connect_server( char *destIp, int destPort, int udp, int timeout);
 int close_socket(int socket_fd);
 int socket_send(int sockfd, unsigned char *buf, int len, int timeout);
 int socket_recv(int sockfd, unsigned char *buf, int len, int timeout);

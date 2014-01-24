@@ -111,6 +111,16 @@ static int CMD_WaitStatus_Res(int timeout)
 }
 */
 
+static void CMD_Sleep(int sec)
+{
+	int i = 0;
+	for (i = 0; i < sec; i += 5) {
+		if (CMA_Env_Parameter.socket_fd < 0)
+			break;
+		sleep(5);
+	}
+}
+
 void *socket_heartbeat_func(void * arg)
 {
 	int ret;
@@ -120,7 +130,7 @@ void *socket_heartbeat_func(void * arg)
 		printf("~~~~~~~~~ HeartBeat Cycle Start --------\n");
 		if (CMA_Env_Parameter.socket_fd < 0) {
 			pthread_mutex_lock(&com_mutex);
-			CMA_Env_Parameter.socket_fd = connect_server(CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.cma_port, 0);
+			CMA_Env_Parameter.socket_fd = connect_server(CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.cma_port, 0, 10);
 			pthread_mutex_unlock(&com_mutex);
 			printf("------ fd = %d\n", CMA_Env_Parameter.socket_fd);
 			if (CMA_Env_Parameter.socket_fd < 0) {
@@ -151,7 +161,7 @@ void *socket_heartbeat_func(void * arg)
 		}
 
 		printf("~~~~~~~~~ HeartBeat Sleep 60s --------\n");
-		sleep(60);
+		CMD_Sleep(60);
 	}
 
 	return 0;
@@ -345,7 +355,7 @@ int main(int argc, char *argv[])
 	 */
 
 	printf("Connect to server: %s \n", CMA_Env_Parameter.cma_ip);
-	CMA_Env_Parameter.socket_fd = connect_server(CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.cma_port, 0);
+	CMA_Env_Parameter.socket_fd = connect_server(CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.cma_port, 0, 10);
 	if (CMA_Env_Parameter.socket_fd < 0) {
 		fprintf(stdout, "CMD: Connect to server error.\n");
 	}
@@ -373,7 +383,7 @@ int main(int argc, char *argv[])
 	printf("Now: %s", asctime(tm));
 	expect = now - tm->tm_sec - (tm->tm_min % 10) * 60;
 	expect += 10 * 60;
-	expect = now + 10;
+//	expect = now + 10;
 	tm = gmtime(&expect);
 	printf("QiXiang Expect: %s", asctime(tm));
 	sample_dev.expect = expect;
@@ -388,7 +398,8 @@ int main(int argc, char *argv[])
 	sample_dev_1.interval = cycle * 60; /* Sampling Cycle */
 	now = rtc_get_time();
 	tm = gmtime(&now);
-	expect = now + 10;
+	expect = now - tm->tm_sec + (2 - tm->tm_min % 2) * 60;
+//	expect = now + 10;
 	tm = gmtime(&expect);
 	printf("TGQingXie Expect: %s", asctime(tm));
 	sample_dev_1.expect = expect;
@@ -403,7 +414,8 @@ int main(int argc, char *argv[])
 	sample_dev_2.interval = cycle * 60; /* Sampling Cycle */
 	now = rtc_get_time();
 	tm = gmtime(&now);
-	expect = now + 10;
+	expect = now - tm->tm_sec + (2 - tm->tm_min % 2) * 60;
+//	expect = now + 10;
 	tm = gmtime(&expect);
 	printf("FuBing Expect: %s", asctime(tm));
 	sample_dev_2.expect = expect;

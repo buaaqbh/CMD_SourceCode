@@ -77,16 +77,28 @@ int start_server(int localport, thrFunc func)
     return serverSocket;
 }
 
-int connect_server(char *destIp, int destPort, int udp)
+int connect_server(char *destIp, int destPort, int udp, int timeout)
 {
     int result;
     struct sockaddr_in address;
     int s_socket;
+	struct timeval tv;
+	int ret;
 
     if (udp)
     	s_socket = socket(AF_INET, SOCK_DGRAM, 0);
     else
     	s_socket = socket(AF_INET, SOCK_STREAM, 0);
+
+    if (timeout <= 0)
+    	timeout = 30;
+	tv.tv_sec = timeout;
+	tv.tv_usec = 0;
+	ret = setsockopt(s_socket, SOL_SOCKET, SO_SNDTIMEO, (char *)&tv, sizeof(struct timeval));
+    if (ret < 0) {
+		perror("setsockopt");
+		return -1;
+	}
 	
     // set server addr
     bzero(&address,sizeof(address)); 

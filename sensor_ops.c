@@ -191,29 +191,33 @@ static void get_wind_data(Data_qixiang_t *data)
 
 	r_len = sizeof(struct record_winavg);
 	r_num = File_GetNumberOfRecords(RECORD_FILE_WINDAVG, r_len);
+	printf("Wind Average: num = %d\n", r_num);
 	if (r_num > 0) {
 		File_GetRecordByIndex(RECORD_FILE_WINDAVG, &r_avg, r_len, (r_num - 1));
 		if (r_avg.tm > (now - 60 * 60)) {
 			data->Average_WindSpeed_10min = r_avg.speed_avg;
 			data->Average_WindDirection_10min = r_avg.speed_d_avg;
 		}
-	}
-	for (i = (r_num - 1); i >= 0; i++) {
-		File_GetRecordByIndex(RECORD_FILE_WINDAVG, &r_avg, r_len, i);
-		if (r_avg.tm < (now - 24 * 60 * 60))
-			break;
-		if (r_avg.speed_avg > data->Max_WindSpeed)
-			data->Max_WindSpeed = r_avg.speed_avg;
+		for (i = (r_num - 1); i >= 0; i--) {
+			File_GetRecordByIndex(RECORD_FILE_WINDAVG, &r_avg, r_len, i);
+			if (r_avg.tm < (now - 24 * 60 * 60))
+				break;
+			if (r_avg.speed_avg > data->Max_WindSpeed)
+				data->Max_WindSpeed = r_avg.speed_avg;
+		}
 	}
 
 	r_len = sizeof(struct record_winsec);
 	r_num = File_GetNumberOfRecords(RECORD_FILE_WINDSEC, r_len);
-	for (i = (r_num - 1); i >= 0; i++) {
-		File_GetRecordByIndex(RECORD_FILE_WINDSEC, &r_sec, r_len, i);
-		if (r_sec.tm < (now - 60 * 60))
-			break;
-		if (r_sec.speed_sec > data->Extreme_WindSpeed)
-			data->Extreme_WindSpeed = r_sec.speed_sec;
+	printf("Wind Second: num = %d\n", r_num);
+	if (r_num > 0) {
+		for (i = (r_num - 1); i >= 0; i--) {
+			File_GetRecordByIndex(RECORD_FILE_WINDSEC, &r_sec, r_len, i);
+			if (r_sec.tm < (now - 60 * 60))
+				break;
+			if (r_sec.speed_sec > data->Extreme_WindSpeed)
+				data->Extreme_WindSpeed = r_sec.speed_sec;
+		}
 	}
 
 	/* ?????????? */
@@ -485,7 +489,7 @@ int Sensor_Sample_Qixiang(void)
 			now = rtc_get_time();
 			tm = gmtime(&now);
 			printf("WindSpeed: Now, %s", asctime(tm));
-			expect = now - tm->tm_sec - (tm->tm_min / 2 * 2 + 2) * 60;
+			expect = now - tm->tm_sec + (2 - tm->tm_min % 2) * 60;
 			wind_sec.expect = expect;
 			tm = gmtime(&expect);
 			printf("WindSpeed: Expect, %s", asctime(tm));
@@ -618,8 +622,8 @@ int Sensor_Sample_FuBing(Data_ice_thickness_t *data)
 
 	if (ret == 0) {
 		data->Tension = force;
-		data->Windage_Yaw_Angle = angle_x;
-		data->Deflection_Angle = angle_y;
+		data->Windage_Yaw_Angle = (float)angle_x / 10;
+		data->Deflection_Angle = (float)angle_y / 10;
 		data->Tension_Difference = wav_cycle;
 		data->Reserve1 = wav_x;
 		data->Reserve2 = wav_y;
@@ -1130,10 +1134,10 @@ void *camera_caputre_func(void *arg)
 		if ((tm->tm_hour == data.Hour) && (tm->tm_min == data.Minute)) {
 			/* Get an image at this pre-setting */
 			if (Camera_StartCapture(imageName, channel, data.Presetting_No) < 0)
-				return 0;
+				break;
 
-			if (CMA_Image_SendRequest(-1, imageName, channel, data.Presetting_No) < 0)
-				return 0;;
+			if (CMA_Image_SendRequest(CMA_Env_Parameter.socket_fd, imageName, channel, data.Presetting_No) < 0)
+				break;
 		}
 		t1 = tm->tm_hour * 60 + tm->tm_min;
 		t2 = data.Hour * 60 + data.Minute;
@@ -1294,8 +1298,8 @@ int Camera_SetTimetable(Ctl_image_timetable_t *tb, byte groups, byte channel)
 
 int Camera_GetImageName(char *filename, byte channel, byte presetting)
 {
-//	char *folder = "/data/images/";
-	char *folder = "data-";
+	char *folder = "/CMD_Data/images/";
+//	char *folder = "data-";
 	time_t now;
 	struct tm *tm;
 
