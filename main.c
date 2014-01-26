@@ -8,6 +8,7 @@
 #include <signal.h>
 #include <getopt.h>
 #include <pthread.h>
+#include <semaphore.h>
 #include <time.h>
 #include "cma_commu.h"
 #include "device.h"
@@ -26,6 +27,17 @@ struct rtc_alarm_dev sample_dev_1;
 struct rtc_alarm_dev sample_dev_2;
 static volatile int CMD_status_regist = 0;
 pthread_mutex_t com_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+#define RCV_BUFFER_NUM		10
+#define CMD_SERVERTHREAD_NUM	2
+static volatile int readIndex = 0;
+static volatile int writeIndex = 0;
+byte *rcvBuffer[10];
+sem_t semFull;
+sem_t semEmpty;
+pthread_mutex_t rcvMutex;
+pthread_mutex_t sndMutex;
+pthread_mutex_t imgMutex;
 
 static void usage(FILE * fp, int argc, char **argv)
 {
@@ -80,17 +92,50 @@ void *socket_receive_func(void * arg)
 				continue;
 			}
 
-			system_sleep_enable(0);
+			sem_wait(&semEmpty);
 
-			if (CMA_Server_Process(CMA_Env_Parameter.socket_fd, rbuf) < 0) {
-				printf("CMD Server Process error.\n");
-				continue;
-			}
+			pthread_mutex_lock(&rcvMutex);
+			writeIndex = writeIndex % RCV_BUFFER_NUM;
+			memcpy(rcvBuffer[writeIndex], rbuf, MAX_COMBUF_SIZE);
+			writeIndex++;
+			pthread_mutex_unlock(&rcvMutex);
 
-			system_sleep_enable(1);
+			sem_post(&semFull);
+
+//			if (CMA_Server_Process(CMA_Env_Parameter.socket_fd, rbuf) < 0) {
+//				printf("CMD Server Process error.\n");
+//				continue;
+//			}
 		}
 
 		sleep(2);
+	}
+
+	return 0;
+}
+
+void *cmd_server_func(void * arg)
+{
+	byte rbuf[MAX_COMBUF_SIZE];
+
+	fprintf(stdout, "Enter func: %s --\n", __func__);
+
+	while(1) {
+		sem_wait(&semFull);
+
+		pthread_mutex_lock(&rcvMutex);
+		readIndex = readIndex % RCV_BUFFER_NUM;
+		memset(rbuf, 0, MAX_COMBUF_SIZE);
+		memcpy(rbuf, rcvBuffer[writeIndex], MAX_COMBUF_SIZE);
+		readIndex++;
+		pthread_mutex_unlock(&rcvMutex);
+
+		sem_post(&semEmpty);
+
+		if (CMA_Server_Process(CMA_Env_Parameter.socket_fd, rbuf) < 0) {
+			printf("CMD Server Process error.\n");
+			continue;
+		}
 	}
 
 	return 0;
@@ -268,12 +313,13 @@ int main(int argc, char *argv[])
 {
 	int index, c;
 	int l2_type = 0;
-	pthread_t pid_socket, p_heartbeat;
+	pthread_t pid_socket, p_heartbeat, pid_server[CMD_SERVERTHREAD_NUM];
 	time_t now, expect;
 	int cycle;
 	struct tm *tm;
 	char *entry = NULL;
 	int ret;
+	int i;
 
 	config_file = CMA_CONFIG_FILE;
 
@@ -347,12 +393,25 @@ int main(int argc, char *argv[])
 		printf("Zigbee Device Init Error.\n");
 	}
 
-	/*
-	{
-		byte buf[16];
-		Sensor_Zigbee_ReadData(buf, 13);
+	/* Init Receive Buffer */
+	for (i = 0; i < RCV_BUFFER_NUM; i++) {
+		rcvBuffer[i] = (byte *)malloc(MAX_COMBUF_SIZE);
+		memset(rcvBuffer[i], 0, MAX_COMBUF_SIZE);
 	}
-	 */
+	ret = sem_init(&semEmpty, 0, RCV_BUFFER_NUM);
+	if (ret != 0) {
+		printf("CMD: sem empty init failed \n");
+		exit(1);
+	}
+	ret = sem_init(&semFull, 0, 0);
+	if (ret != 0) {
+		printf("CMD: sem full init failed \n");
+		exit(1);
+	}
+	pthread_mutex_init(&rcvMutex, NULL);
+	pthread_mutex_init(&sndMutex, NULL);
+	pthread_mutex_init(&imgMutex, NULL);
+	readIndex = writeIndex = 0;
 
 	printf("Connect to server: %s \n", CMA_Env_Parameter.cma_ip);
 	CMA_Env_Parameter.socket_fd = connect_server(CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.cma_port, 0, 10);
@@ -362,11 +421,17 @@ int main(int argc, char *argv[])
 
 	ret = pthread_create(&p_heartbeat, NULL, socket_heartbeat_func, NULL);
 	if (ret != 0)
-		printf("Sensor: can't create thread.");
+		printf("Sensor: can't create heartbeat thread.");
 
 	ret = pthread_create(&pid_socket, NULL, socket_receive_func, NULL);
 	if (ret != 0)
-		printf("Sensor: can't create thread.");
+		printf("Sensor: can't create receive thread.");
+
+	for (i = 0;i < CMD_SERVERTHREAD_NUM; i++) {
+		ret = pthread_create(&pid_server[i], NULL, cmd_server_func, NULL);
+		if (ret != 0)
+			printf("Sensor: can't create server thread.");
+	}
 
 	entry = "qixiang:samp_period";
 
@@ -431,13 +496,23 @@ int main(int argc, char *argv[])
 //			printf("Main Sample rtc timer is atcive.\n");
 	}
 
+	for (i = 0; i < RCV_BUFFER_NUM; i++) {
+		free(rcvBuffer[i]);
+	}
+
 	ret = pthread_join(p_heartbeat, NULL);
 	if (ret != 0)
-		printf("CMD: can't join with p2 thread.");
+		printf("CMD: can't join with hearbeat thread.");
 
 	ret = pthread_join(pid_socket, NULL);
 	if (ret != 0)
-		printf("CMD: can't join with p2 thread.");
+		printf("CMD: can't join with socket receive thread.");
+
+	for (i = 0;i < CMD_SERVERTHREAD_NUM; i++) {
+		ret = pthread_join(pid_server[i], NULL);
+		if (ret != 0)
+			printf("CMD: can't join with server thread.");
+	}
 
 	pthread_spin_destroy(&spinlock);
 
