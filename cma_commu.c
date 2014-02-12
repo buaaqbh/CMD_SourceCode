@@ -353,6 +353,12 @@ int CMA_Server_Process(int fd, byte *rbuf)
 			if (CMA_CameraControl_Response(fd, rbuf) < 0)
 				ret = -1;
 			break;
+		case CMA_MSG_TYPE_IMAGE_DATA_REP:
+			pthread_mutex_lock(&imgMutex);
+			memcpy(imageRbuf, rbuf, MAX_COMBUF_SIZE);
+			imageRcvLen = f_head->pack_len;
+			pthread_mutex_unlock(&imgMutex);
+			break;
 		default:
 			ret = -1;
 			printf("CMA: Invalid MSG type.\n");
@@ -1319,7 +1325,7 @@ int CMA_Image_SendImageFile(int fd, char *ImageFile, byte channel, byte presetti
 {
 	frame_head_t f_head;
 	frame_head_t *p_head;
-	byte sbuf[CMA_MSG_MAX_LEN];
+	byte sbuf[MAX_COMBUF_SIZE];
 	int image_fd;
 	int size = 0;
 	usint pkg_num = 0;
@@ -1364,10 +1370,10 @@ int CMA_Image_SendImageFile(int fd, char *ImageFile, byte channel, byte presetti
 
 		f_head.pack_len = 6 + ret;
 
-		printf("Send Image: i = %d, len = %d, fd = %d\n", i, ret, fd);
+		printf("Send Image: i = %d, pkg_num = %d, len = %d, fd = %d\n", i, pkg_num, ret, fd);
 		if (Commu_SendPacket(fd, &f_head, sbuf) < 0)
 			return -1;
-		usleep(40000);
+		usleep(400000);
 	}
 
 	sleep(2);
@@ -1402,7 +1408,7 @@ int CMA_Image_SendImageFile(int fd, char *ImageFile, byte channel, byte presetti
 int CMA_Image_SendImageLost(int fd, char *ImageFile, byte *rbuf)
 {
 	frame_head_t f_head;
-	byte sbuf[CMA_MSG_MAX_LEN];
+	byte sbuf[MAX_COMBUF_SIZE];
 	int image_fd;
 	int size = 0;
 	usint pkg_num = 0;
@@ -1458,7 +1464,7 @@ int CMA_Image_SendImageLost(int fd, char *ImageFile, byte *rbuf)
 		printf("Send Lost Image: total = %d, index = %d, len = %d\n", total, index, ret);
 		if (Commu_SendPacket(fd, &f_head, sbuf) < 0)
 			return -1;
-		usleep(40000);
+		usleep(400000);
 
 		index_buf += 2;
 	}

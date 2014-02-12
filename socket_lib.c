@@ -144,6 +144,15 @@ int socket_send(int sockfd, unsigned char *buf, int len, int timeout)
 		return -1;
 	}
 
+    int s_buf_size = 64 * 1024;
+    unsigned int m = sizeof(s_buf_size);
+	if (setsockopt(sockfd, SOL_SOCKET, SO_SNDBUF, (char *)&s_buf_size, sizeof(int)) < 0) {
+		printf("setsockopt fail to change SNDbuf.\n");
+		return -1;
+	}
+//	getsockopt(sockfd, SOL_SOCKET, SO_SNDBUF, (void *)&s_buf_size, &m);
+//	printf("Socket Send Buffer size = %d \n", s_buf_size);
+
 	while (1)
 	{
 		sendBytes = send(sockfd, p_buf, total_len, MSG_NOSIGNAL);

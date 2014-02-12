@@ -89,16 +89,24 @@ int rtc_set_time(struct tm *rtc_tm)
 
 int start_timer_function_thr( void * (*func)(void *) )
 {
+	int ret;
     pthread_t p;
+    pthread_attr_t tattr;
 
 #ifdef _DEBUG
     printf("Enter func: %s.\n", __func__);
 #endif
 
-    if(pthread_create( &p, NULL, func, NULL)) {
-        printf("RTC Timer function start error!\n");
-        return -1;
+    pthread_attr_init(&tattr);
+    pthread_attr_setdetachstate(&tattr, PTHREAD_CREATE_DETACHED);
+
+    ret = pthread_create( &p, &tattr, func, NULL);
+    if(ret) {
+    	printf("RTC Timer function start error, ret = %d !\n", ret);
+    	return -1;
     }
+
+    pthread_attr_destroy(&tattr);
 
     return 0;
 }
@@ -142,6 +150,8 @@ void *rtc_alarm_wait(void * arg)
 	unsigned long data = 0;
 	time_t cur_time = 0;
 	int retval;
+
+	pthread_detach(pthread_self());
 
 	while (1) {
 		printf("RTC_ALARM: Wait for rtc alarm.\n");

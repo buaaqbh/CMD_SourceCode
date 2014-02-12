@@ -71,9 +71,9 @@ int Device_Env_init(void)
 	if (domain != NULL)
 		memcpy(CMA_Env_Parameter.cma_domain, domain, strlen(domain));
 	if (memcmp(s_proto, "udp", 3) == 0)
-		CMA_Env_Parameter.s_protocal = 0;
-	else if (memcmp(s_proto, "tcp", 3) == 0)
 		CMA_Env_Parameter.s_protocal = 1;
+	else if (memcmp(s_proto, "tcp", 3) == 0)
+		CMA_Env_Parameter.s_protocal = 0;
 
 	iniparser_freedict(ini);
 	return 0;
@@ -216,7 +216,9 @@ int Device_wifi_init(void)
 
 void *W3G_Start_func(void *data)
 {
-	char *cmd_shell = "/usr/sbin/start_3G.sh >/tmp/w3g.log";
+//	char *cmd_shell = "/usr/sbin/start_3G.sh >/tmp/w3g.log";
+
+	pthread_detach(pthread_self());
 
 	fprintf(stdout, "CMD: Start 3G Module.\n");
 

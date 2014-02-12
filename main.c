@@ -94,6 +94,7 @@ void *socket_receive_func(void * arg)
 
 			sem_wait(&semEmpty);
 
+			printf("----- writeIndex = %d --------\n", writeIndex);
 			pthread_mutex_lock(&rcvMutex);
 			writeIndex = writeIndex % RCV_BUFFER_NUM;
 			memcpy(rcvBuffer[writeIndex], rbuf, MAX_COMBUF_SIZE);
@@ -123,10 +124,11 @@ void *cmd_server_func(void * arg)
 	while(1) {
 		sem_wait(&semFull);
 
+		printf("----- readIndex = %d --------\n", readIndex);
 		pthread_mutex_lock(&rcvMutex);
 		readIndex = readIndex % RCV_BUFFER_NUM;
 		memset(rbuf, 0, MAX_COMBUF_SIZE);
-		memcpy(rbuf, rcvBuffer[writeIndex], MAX_COMBUF_SIZE);
+		memcpy(rbuf, rcvBuffer[readIndex], MAX_COMBUF_SIZE);
 		readIndex++;
 		pthread_mutex_unlock(&rcvMutex);
 
@@ -175,11 +177,11 @@ void *socket_heartbeat_func(void * arg)
 		printf("~~~~~~~~~ HeartBeat Cycle Start --------\n");
 		if (CMA_Env_Parameter.socket_fd < 0) {
 			pthread_mutex_lock(&com_mutex);
-			CMA_Env_Parameter.socket_fd = connect_server(CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.cma_port, 0, 10);
+			CMA_Env_Parameter.socket_fd = connect_server(CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.cma_port, CMA_Env_Parameter.s_protocal, 10);
 			pthread_mutex_unlock(&com_mutex);
 			printf("------ fd = %d\n", CMA_Env_Parameter.socket_fd);
 			if (CMA_Env_Parameter.socket_fd < 0) {
-				fprintf(stderr, "CMD: Can't Connect to socket server.\n");
+				fprintf(stdout, "CMD: Connect to server error, type: %s.\n", CMA_Env_Parameter.s_protocal ? "UDP":"TCP");
 				sleep(5);
 				continue;
 			}
@@ -413,10 +415,10 @@ int main(int argc, char *argv[])
 	pthread_mutex_init(&imgMutex, NULL);
 	readIndex = writeIndex = 0;
 
-	printf("Connect to server: %s \n", CMA_Env_Parameter.cma_ip);
-	CMA_Env_Parameter.socket_fd = connect_server(CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.cma_port, 0, 10);
+	printf("Connect to server: %s, protocal: %s\n", CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.s_protocal ? "UDP":"TCP");
+	CMA_Env_Parameter.socket_fd = connect_server(CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.cma_port, CMA_Env_Parameter.s_protocal, 10);
 	if (CMA_Env_Parameter.socket_fd < 0) {
-		fprintf(stdout, "CMD: Connect to server error.\n");
+		fprintf(stdout, "CMD: Connect to server error, type: %s.\n", CMA_Env_Parameter.s_protocal ? "UDP":"TCP");
 	}
 
 	ret = pthread_create(&p_heartbeat, NULL, socket_heartbeat_func, NULL);
