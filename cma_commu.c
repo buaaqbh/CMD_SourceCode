@@ -44,7 +44,7 @@ static void print_message(byte *buf, int len)
 }
 #endif
 
-int Commu_GetPacket_Udp(int fd, int localport, byte *rbuf, int len, int timeout)
+int Commu_GetPacket_Udp(int fd, byte *rbuf, int len, int timeout)
 {
 	int ret = 0;
 	usint crc16 = 0;
@@ -55,12 +55,10 @@ int Commu_GetPacket_Udp(int fd, int localport, byte *rbuf, int len, int timeout)
 		return -1;
 	}
 
-	printf("Begin to receive msg, len = %d\n", len);
+	printf("UDP Socket Begin to receive msg, len = %d\n", len);
 	memset(rbuf, 0, len);
 	if (fd == -1) {
-		ret = socket_recv_udp(localport, rbuf, len, timeout);
-		if (ret < 0)
-			return ret;
+		return -1;
 	}
 	else {
 		ret = socket_recv(fd, rbuf, len, timeout);
@@ -108,6 +106,9 @@ int Commu_GetPacket(int fd, byte *rbuf, int len, int timeout)
 		return -1;
 
 	memset(rbuf, 0, len);
+
+	if (CMA_Env_Parameter.s_protocal == 1)
+		return Commu_GetPacket_Udp(fd, rbuf, len, timeout);
 
 //	printf("Begin to receive msg, len = %d\n", len);
 	
@@ -1332,6 +1333,7 @@ int CMA_Image_SendImageFile(int fd, char *ImageFile, byte channel, byte presetti
 	byte data[IMAGE_SUBDATA_LEN];
 	int i, timeout;
 	int ret = -1;
+	usint lost_num = 0;
 
 	if (File_Exist(ImageFile) == 0)
 		return -1;
@@ -1386,7 +1388,7 @@ int CMA_Image_SendImageFile(int fd, char *ImageFile, byte channel, byte presetti
 		memset(imageRbuf, 0, MAX_COMBUF_SIZE);
 		imageRcvLen = 0;
 		pthread_mutex_unlock(&imgMutex);
-		timeout = 5 * 100;
+		timeout = 8 * 100;
 		while ((imageRcvLen == 0) && (timeout)) {
 			usleep(10*1000);
 			timeout--;
@@ -1394,8 +1396,12 @@ int CMA_Image_SendImageFile(int fd, char *ImageFile, byte channel, byte presetti
 		if (imageRcvLen > 0) {
 			p_head = (frame_head_t *)imageRbuf;
 			if (p_head->msg_type == CMA_MSG_TYPE_IMAGE_DATA_REP) {
-				CMA_Image_SendImageLost(fd, ImageFile, imageRbuf);
-				i = 0;
+				memcpy(&lost_num, (imageRbuf + sizeof(frame_head_t) + 2), 2);
+				printf("Lost Image Data: total = %d \n", lost_num);
+				if (lost_num > 0) {
+					CMA_Image_SendImageLost(fd, ImageFile, imageRbuf);
+					i = 0;
+				}
 			}
 		}
 	}

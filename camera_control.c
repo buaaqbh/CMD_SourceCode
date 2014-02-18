@@ -18,7 +18,7 @@
 #define  UART_RS485_SPEDD 	9600
 #define  ACTION_INTERVAL	(800*1000)
 
-#define _DEBUG
+//#define _DEBUG
 
 #ifdef _DEBUG
 #define Enter_func()  printf("----- Enter func: %s --------\n", __func__)
@@ -113,6 +113,7 @@ void Camera_CallPreset(byte addr, byte index)
 {
 	byte cmd[7] = {0xff, 0x01, 0x00, 0x07, 0x00, 0x01, 0x09};
 	Enter_func();
+	printf("Camera_CallPreset: index = %d \n", index);
 	cmd[1] = addr;
 	cmd[5] = index;
 	Camera_SendCmd(cmd, 7);
@@ -122,6 +123,7 @@ void Camera_SetPreset(byte addr, byte index)
 {
 	byte cmd[7] = {0xff, 0x01, 0x00, 0x03, 0x00, 0x01, 0x05};
 	Enter_func();
+	printf("Camera_SetPreset: index = %d \n", index);
 	cmd[1] = addr;
 	cmd[5] = index;
 	Camera_SendCmd(cmd, 7);

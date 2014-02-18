@@ -14,6 +14,7 @@
 #include <linux/can.h>
 #include <linux/can/raw.h>
 #include <pthread.h>
+#include <errno.h>
 #include "sensor_ops.h"
 #include "camera_control.h"
 #include "rtc_alarm.h"
@@ -146,6 +147,32 @@ int Sensor_Detect_Qixiang(void)
 	return flag;
 }
 
+int Sensor_Get_AlarmValue(byte type, byte index, void *value)
+{
+	int i;
+	int total = 0;
+	int record_len = sizeof(alarm_value_t);
+	alarm_value_t record;
+
+	total = File_GetNumberOfRecords(FILE_ALARM_PAR, record_len);
+	if (total == 0) {
+		return -1;
+	}
+
+	for (i = 0; i < total; i++) {
+		memset(&record, 0, record_len);
+		if (File_GetRecordByIndex(FILE_ALARM_PAR, &record, record_len, i) == record_len) {
+			if ((record.type == type) && (record.alarm_par[0] == index)) {
+				memcpy(value, &record.alarm_value, 4);
+				return 0;
+			}
+		}
+
+	}
+
+	return -1;
+}
+
 static Data_qixiang_t s_data;
 static int data_qixiang_flag = 0;
 
@@ -180,6 +207,8 @@ static void get_wind_data(Data_qixiang_t *data)
 	int r_len = 0;
 	int i = 0;
 	time_t now;
+	float f_threshold = 0.0;
+	int   i_threshold = 0;
 
 	now = rtc_get_time();
 
@@ -223,6 +252,31 @@ static void get_wind_data(Data_qixiang_t *data)
 	/* ?????????? */
 	data->Standard_WindSpeed = data->Extreme_WindSpeed;
 
+	if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 1, &f_threshold) == 0) {
+		if (data->Average_WindSpeed_10min > f_threshold)
+			data->Alerm_Flag |= (1 << 0);
+	}
+
+	if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 2, &i_threshold) == 0) {
+		if (data->Average_WindDirection_10min > i_threshold)
+			data->Alerm_Flag |= (1 << 1);
+	}
+
+	if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 3, &f_threshold) == 0) {
+		if (data->Max_WindSpeed > f_threshold)
+			data->Alerm_Flag |= (1 << 2);
+	}
+
+	if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 4, &f_threshold) == 0) {
+		if (data->Extreme_WindSpeed > f_threshold)
+			data->Alerm_Flag |= (1 << 3);
+	}
+
+	if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 5, &f_threshold) == 0) {
+		if (data->Standard_WindSpeed > f_threshold)
+			data->Alerm_Flag |= (1 << 4);
+	}
+
 	return;
 }
 
@@ -236,6 +290,8 @@ void *sensor_sample_qixiang_1(void * arg)
 	int pres[6];
 	int radia[6];
 	usint alarm = 0;
+	float f_threshold = 0.0;
+	int   i_threshold = 0;
 
 	printf("Enter func: %s, flag = 0x%x\n", __func__, flag);
 	memset(temp, 0, 6);
@@ -258,7 +314,23 @@ void *sensor_sample_qixiang_1(void * arg)
 			if (i == 5) {
 				s_data.Air_Temperature = (float)sample_avg(temp, 6) / 10;
 				s_data.Humidity = (usint)sample_avg(humi, 6);
-				s_data.Air_Pressure = sample_avg(pres, 6);
+				s_data.Air_Pressure = (float)sample_avg(pres, 6);
+				CMA_Env_Parameter.temp = s_data.Air_Temperature;
+
+				if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 6, &f_threshold) == 0) {
+					if (s_data.Air_Temperature > f_threshold)
+						s_data.Alerm_Flag |= (1 << 5);
+				}
+
+				if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 7, &i_threshold) == 0) {
+					if (s_data.Humidity > i_threshold)
+						s_data.Alerm_Flag |= (1 << 6);
+				}
+
+				if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 8, &f_threshold) == 0) {
+					if (s_data.Air_Pressure > f_threshold)
+						s_data.Alerm_Flag |= (1 << 7);
+				}
 			}
 		}
 		if ((flag & 0x10) == 0x10) {
@@ -272,6 +344,11 @@ void *sensor_sample_qixiang_1(void * arg)
 			}
 			if (i == 5) {
 				s_data.Radiation_Intensity = sample_avg(radia, 6);
+
+				if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 11, &i_threshold) == 0) {
+					if (s_data.Radiation_Intensity > i_threshold)
+						s_data.Alerm_Flag |= (1 << 10);
+				}
 			}
 		}
 		if (i < 5)
@@ -282,9 +359,19 @@ void *sensor_sample_qixiang_1(void * arg)
 		if (Sensor_Can_ReadData(Sensor_CAN_List_Qixiang[3].addr, buf) == 0) {
 			s_data.Precipitation = (buf[6] << 8) | buf[7];
 			s_data.Precipitation_Intensity = (buf[8] << 8) | buf[9];
-			printf("Sample: Precipitation = %d, Intensity = %d\n", s_data.Precipitation, s_data.Precipitation_Intensity);
+			printf("Sample: Precipitation = %f, Intensity = %f\n", s_data.Precipitation, s_data.Precipitation_Intensity);
 			if (buf[18] != 0)
 				alarm |= ((buf[18] & 0x03) << 8);
+
+			if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 9, &f_threshold) == 0) {
+				if (s_data.Precipitation > f_threshold)
+					s_data.Alerm_Flag |= (1 << 8);
+			}
+
+			if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 10, &f_threshold) == 0) {
+				if (s_data.Precipitation_Intensity > f_threshold)
+					s_data.Alerm_Flag |= (1 << 9);
+			}
 		}
 	}
 
@@ -400,6 +487,7 @@ void *sensor_sample_windAvg(void * arg)
 void *sensor_qixiang_zigbee(void * arg)
 {
 	byte buf[16];
+	float f_threshold = 0.0;
 	printf("Sensor: Get data from zigbee device.\n");
 
 	memset(buf, 0, 16);
@@ -407,6 +495,16 @@ void *sensor_qixiang_zigbee(void * arg)
 		s_data.Precipitation = (buf[4] << 8) | buf[5];
 		s_data.Precipitation_Intensity = (buf[6] << 8) | buf[7];
 		data_qixiang_flag++;
+
+		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 9, &f_threshold) == 0) {
+			if (s_data.Precipitation > f_threshold)
+				s_data.Alerm_Flag |= (1 << 8);
+		}
+
+		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 10, &f_threshold) == 0) {
+			if (s_data.Precipitation_Intensity > f_threshold)
+				s_data.Alerm_Flag |= (1 << 9);
+		}
 	}
 	else {
 		fprintf(stderr, "Sensor: read zigbee data error.\n");
@@ -519,16 +617,16 @@ int Sensor_Sample_Qixiang(void)
 		}
 
 		printf("Sample Qixiang Data: \n");
-		printf("平均风速： %d \n", s_data.Average_WindSpeed_10min);
+		printf("平均风速： %f \n", s_data.Average_WindSpeed_10min);
 		printf("平均风向： %d \n", s_data.Average_WindDirection_10min);
-		printf("极大风速： %d \n", s_data.Extreme_WindSpeed);
-		printf("最大风速： %d \n", s_data.Max_WindSpeed);
-		printf("标准风速： %d \n", s_data.Standard_WindSpeed);
+		printf("极大风速： %f \n", s_data.Extreme_WindSpeed);
+		printf("最大风速： %f \n", s_data.Max_WindSpeed);
+		printf("标准风速： %f \n", s_data.Standard_WindSpeed);
 		printf("温 度： %f \n", s_data.Air_Temperature);
 		printf("湿 度： %d \n", s_data.Humidity);
-		printf("大气压： %d \n", s_data.Air_Pressure);
-		printf("降雨量： %d \n", s_data.Precipitation);
-		printf("降水强度： %d \n", s_data.Precipitation_Intensity);
+		printf("大气压： %f \n", s_data.Air_Pressure);
+		printf("降雨量： %f \n", s_data.Precipitation);
+		printf("降水强度： %f \n", s_data.Precipitation_Intensity);
 		printf("光辐射： %d \n", s_data.Radiation_Intensity);
 	}
 
@@ -544,6 +642,7 @@ int Sensor_Sample_TGQingXie(Data_incline_t *data)
 	int angle_x, angle_y;
 	struct record_incline record;
 	int record_len = 0;
+	float f_threshold = 0.0;
 
 	memset(&record, 0, sizeof(struct record_incline));
 	record.tm = rtc_get_time();
@@ -570,6 +669,16 @@ int Sensor_Sample_TGQingXie(Data_incline_t *data)
 		printf("Sample Incline Data: \n");
 		printf("顺线倾斜角： %f \n", data->Angle_X);
 		printf("横向倾斜角： %f \n", data->Angle_Y);
+
+		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_TGQX_PAR, 4, &f_threshold) == 0) {
+			if (data->Angle_X > f_threshold)
+				data->Alerm_Flag |= (1 << 3);
+		}
+
+		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_TGQX_PAR, 5, &f_threshold) == 0) {
+			if (data->Angle_Y > f_threshold)
+				data->Alerm_Flag |= (1 << 4);
+		}
 
 		ret = 0;
 	}
@@ -775,6 +884,15 @@ static int can_socket_init(char *interface)
 		return -1;
 	}
 
+/*  int s_buf_size = 64 * 1024;
+    unsigned int m = sizeof(s_buf_size);
+	if (setsockopt(s, SOL_SOCKET, SO_SNDBUF, (char *)&s_buf_size, sizeof(int)) < 0) {
+		printf("setsockopt fail to change SNDbuf.\n");
+		return -1;
+	}
+	getsockopt(s, SOL_SOCKET, SO_SNDBUF, (void *)&s_buf_size, &m);
+	printf("Socket Write Buffer size = %d \n", s_buf_size);
+*/
 	return s;
 }
 
@@ -805,7 +923,7 @@ int Can_Send(byte *buf, int len)
 	while (loopcount--) {
 		ret = write(s, &frame, sizeof(frame));
 		if (ret == -1) {
-			perror("write");
+			perror("CAN Device write");
 			break;
 		}
 	}
@@ -886,14 +1004,17 @@ int Sensor_Can_ReadData(usint addr, byte *buf)
 
 	ret = write(s, &frame, sizeof(frame));
 	if (ret == -1) {
-		perror("write");
+		if (errno == ENOBUFS) {
+			printf("CAN No write buffer left.\n");
+		}
+		perror("CAN Device write");
 		goto err;
 	}
 
 	pbuf = buf;
 	for (i = 0; i < 3; i++) {
 		if ((ret = io_readn(s, &frame, sizeof(struct can_frame), timeout)) < 0) {
-			perror("read");
+			perror("CAN Device read");
 			goto err;
 		}
 		memcpy(pbuf, frame.data, frame.can_dlc);
@@ -1009,6 +1130,7 @@ int Camera_GetImages(char *ImageName, byte presetting, byte channel)
 	int ret;
 
 	Camera_PowerOn(CAMERA_DEVICE_ADDR);
+	usleep(500 * 1000);
 	Camera_CallPreset(CAMERA_DEVICE_ADDR, presetting);
 
 	memset(&par, 0, sizeof(Ctl_image_device_t));

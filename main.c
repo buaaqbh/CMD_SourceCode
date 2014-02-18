@@ -29,7 +29,7 @@ static volatile int CMD_status_regist = 0;
 pthread_mutex_t com_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 #define RCV_BUFFER_NUM		10
-#define CMD_SERVERTHREAD_NUM	2
+#define CMD_SERVERTHREAD_NUM	10
 static volatile int readIndex = 0;
 static volatile int writeIndex = 0;
 byte *rcvBuffer[10];
@@ -301,10 +301,10 @@ void *Sensor_Sample_loop_FuBing(void * arg)
 void enter_sleep(int sig)
 {
 //	char *cmd_shell = "echo mem >/sys/power/state";
-	printf("Enter func: %s\n", __func__);
+//	printf("Enter func: %s\n", __func__);
 
 	if (System_Sleep_Enable) {
-		printf("CMD: System Enter Sleep.\n");
+//		printf("CMD: System Enter Sleep.\n");
 //	system(cmd_shell);
 	}
 

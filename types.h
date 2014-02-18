@@ -135,6 +135,7 @@ typedef struct env_data {
 	char	cma_domain[64];
 	int 	s_protocal;
 	int 	socket_fd;
+	float	temp;
 } env_data_t;
 
 extern env_data_t CMA_Env_Parameter;
@@ -155,16 +156,16 @@ typedef struct _data_str_qixiang
 	byte 	Component_ID[17];
 	int 	Time_Stamp;
 	usint 	Alerm_Flag;
-	int 	Average_WindSpeed_10min;
+	float 	Average_WindSpeed_10min;
 	usint 	Average_WindDirection_10min;
-	int 	Max_WindSpeed;
-	int 	Extreme_WindSpeed;
-	int 	Standard_WindSpeed;
+	float 	Max_WindSpeed;
+	float 	Extreme_WindSpeed;
+	float 	Standard_WindSpeed;
 	float 	Air_Temperature;
 	usint 	Humidity;
-	int 	Air_Pressure;
-	int 	Precipitation;
-	int 	Precipitation_Intensity;
+	float 	Air_Pressure;
+	float 	Precipitation;
+	float 	Precipitation_Intensity;
 	int 	Radiation_Intensity;
 	int 	Reserve1;
 	int 	Reserve2;
@@ -361,12 +362,12 @@ typedef struct _status_str_basic_info
 typedef struct _status_str_working
 {
 	int 	Time_Stamp;
-	int 	Battery_Voltage;
-	int 	Operation_Temperature;
-	int 	Battery_Capacity;
+	float 	Battery_Voltage;
+	float 	Operation_Temperature;
+	float 	Battery_Capacity;
 	byte 	FloatingCharge;
-	int 	Total_Working_Time;
-	int 	Working_Time;
+	float 	Total_Working_Time;
+	float 	Working_Time;
 	byte 	Connection_State;
 	byte	reserve[30];
 } status_working_t;

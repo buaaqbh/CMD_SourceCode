@@ -406,16 +406,56 @@ int Device_get_basic_info(status_basic_info_t *dev)
 	return 0;
 }
 
+#define BATTERY_DEVICE "/sys/class/power_supply/ADS_Battery/voltage_now"
+#define VOLTAGE_MAX		12.0
+#define VOLTAGE_MIN		6.0
+
+static int Device_get_voltage(void)
+{
+	int fd;
+	int len;
+	char battery[16] = { 0 };
+	int power = 0;
+
+	fd = open(BATTERY_DEVICE, O_RDWR);
+	if (fd < 0) {
+		fprintf(stderr, "Open Battery device error.\n");
+		return -1;
+	}
+
+    if ((len = read(fd, battery, sizeof(battery))) <= 0) {
+        fprintf(stderr, "Read battery fail: %s\n", strerror(errno));
+        close(fd);
+        return -1;
+    }
+
+    power = strtol(battery, NULL, 10);
+
+	close(fd);
+
+	return power;
+}
+
 int Device_get_working_status(status_working_t *status)
 {
 	struct timespec t;
+	int power = 0;
+	float capacity = 0.0;
 
 	clock_gettime(CLOCK_MONOTONIC, &t);
 //	printf("tv_sec=%llu, tv_nsec=%llu\n", (unsigned long long)t.tv_sec, (unsigned long long)t.tv_nsec);
 
 	status->Time_Stamp = (int)time((time_t*)NULL);
-	status->Working_Time = t.tv_sec / 3600;
+	status->Working_Time = (float)t.tv_sec / 3600;
 	status->Total_Working_Time = status->Working_Time;
+	power = Device_get_voltage();
+	if (power < 0)
+		power = 12000;
+	status->Battery_Voltage = (float)power / 1000;
+	status->Operation_Temperature = CMA_Env_Parameter.temp;
+
+	capacity = (status->Battery_Voltage - VOLTAGE_MIN) * 100 / (VOLTAGE_MAX - VOLTAGE_MIN);
+	status->Battery_Capacity = capacity;
 
 	return 0;
 }

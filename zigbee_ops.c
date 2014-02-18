@@ -656,7 +656,7 @@ int Sensor_Zigbee_ReadData(byte *buf, int len)
 #endif
 	}
 
-	if ((memcmp(rbuf, res, 4)) || (memcmp(rbuf + 8, res + 8, 5)))
+	if ((memcmp(rbuf, res, 4))) // || (memcmp(rbuf + 8, res + 8, 5)))
 		err = -1;
 	else {
 		memcpy(buf, rbuf, len);
