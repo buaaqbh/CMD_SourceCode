@@ -18,6 +18,7 @@
 #include "list.h"
 #include "types.h"
 #include "rtc_alarm.h"
+#include "sms_function.h"
 
 char *config_file = NULL;
 pthread_spinlock_t spinlock;
@@ -94,7 +95,7 @@ void *socket_receive_func(void * arg)
 
 			sem_wait(&semEmpty);
 
-			printf("----- writeIndex = %d --------\n", writeIndex);
+			printf("--------- writeIndex = %d --------\n", writeIndex);
 			pthread_mutex_lock(&rcvMutex);
 			writeIndex = writeIndex % RCV_BUFFER_NUM;
 			memcpy(rcvBuffer[writeIndex], rbuf, MAX_COMBUF_SIZE);
@@ -234,6 +235,8 @@ void *Sensor_Sample_loop_QiXiang(void * arg)
 			fprintf(stderr, "CMD: Socket Send Env Data error.\n");
 		}
 	}
+
+	Sensor_FaultStatus();
 
 	system_sleep_enable(1);
 
@@ -491,6 +494,8 @@ int main(int argc, char *argv[])
 	rtc_alarm_update();
 
 	Camera_NextTimer();
+
+	SMS_Init();
 
 	while (1) {
 		sleep(60);

@@ -110,7 +110,7 @@ int connect_server(char *destIp, int destPort, int udp, int timeout)
     // connect tcp server
 	result = connect(s_socket, (struct sockaddr *)&address, sizeof(address));
 	if( result == -1 ) {
-		printf("[tcp client] can't connect server !\n");
+//		printf("[tcp client] can't connect server !\n");
 		return -1;
 	}
 	
@@ -145,7 +145,7 @@ int socket_send(int sockfd, unsigned char *buf, int len, int timeout)
 	}
 
     int s_buf_size = 64 * 1024;
-    unsigned int m = sizeof(s_buf_size);
+//	unsigned int m = sizeof(s_buf_size);
 	if (setsockopt(sockfd, SOL_SOCKET, SO_SNDBUF, (char *)&s_buf_size, sizeof(int)) < 0) {
 		printf("setsockopt fail to change SNDbuf.\n");
 		return -1;

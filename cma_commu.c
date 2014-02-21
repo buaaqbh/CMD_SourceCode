@@ -68,7 +68,7 @@ int Commu_GetPacket_Udp(int fd, byte *rbuf, int len, int timeout)
 
 	memcpy(&size, (rbuf + 2), 2);
 	printf("size = %d, ret = %d \n", size, ret);
-	if ((size <= 0) || (ret < (size + sizeof(frame_head_t) + 2)))
+	if ((size < 0) || (ret < (size + sizeof(frame_head_t) + 2)))
 		return -1;
 
 	if ((rbuf[0] != 0xA5) && (rbuf[1] != 0x5A)) {
@@ -118,7 +118,7 @@ int Commu_GetPacket(int fd, byte *rbuf, int len, int timeout)
 
 	memcpy(&size, (rbuf + 2), 2);
 //	printf("size = %d \n", size);
-	if ((size <= 0) || (ret != sizeof(frame_head_t))) {
+	if ((size < 0) || (ret != sizeof(frame_head_t))) {
 		return -1;
 	}
 	
@@ -359,6 +359,12 @@ int CMA_Server_Process(int fd, byte *rbuf)
 			memcpy(imageRbuf, rbuf, MAX_COMBUF_SIZE);
 			imageRcvLen = f_head->pack_len;
 			pthread_mutex_unlock(&imgMutex);
+			break;
+		case CMA_MSG_TYPE_IMAGE_GET_PAR:
+			if (CMA_GetImagePar_Response(fd, rbuf) < 0)
+				ret = -1;
+			break;
+		case CMA_MSG_TYPE_IMAGE_GET_TIME:
 			break;
 		default:
 			ret = -1;
@@ -1217,6 +1223,29 @@ int CMA_SetImagePar_Response(int fd, byte *rbuf)
 	return 0;
 }
 
+int CMA_GetImagePar_Response(int fd, byte *rbuf)
+{
+	frame_head_t *p_head = (frame_head_t *)rbuf;
+	byte sbuf[MAX_DATA_BUFSIZE];
+	Ctl_image_device_t par;
+
+	memset(sbuf, 0, MAX_DATA_BUFSIZE);
+
+	p_head->frame_type = CMA_FRAME_TYPE_IMAGE_CTRL;
+	p_head->pack_len = sizeof(Ctl_image_device_t);
+
+	memset(&par, 0, sizeof(Ctl_image_device_t));
+	if (Camera_GetParameter(&par) < 0) {
+		return -1;
+	}
+	memcpy(sbuf, &par, sizeof(Ctl_image_device_t));
+
+	if (Commu_SendPacket(fd, p_head, sbuf) < 0)
+		return -1;
+
+	return 0;
+}
+
 int CMA_CaptureTimetable_Response(int fd, byte *rbuf)
 {
 //	frame_head_t *p_head = (frame_head_t *)rbuf;
@@ -1228,6 +1257,31 @@ int CMA_CaptureTimetable_Response(int fd, byte *rbuf)
 	 *  Set Camera Time Table
 	 */
 	if (Camera_SetTimetable(image_tb, groups, channel) < 0)
+		return -1;
+
+	return 0;
+}
+
+int CMA_GetImageTimeTable_Response(int fd, byte *rbuf)
+{
+	frame_head_t *p_head = (frame_head_t *)rbuf;
+	byte sbuf[MAX_DATA_BUFSIZE];
+	int num = 0;
+
+	memset(sbuf, 0, MAX_DATA_BUFSIZE);
+
+	p_head->frame_type = CMA_FRAME_TYPE_IMAGE_CTRL;
+
+
+	if (Camera_GetTimeTable((sbuf + 2), &num) < 0)
+		return -1;
+
+	sbuf[0] = 1;
+	sbuf[1] = num;
+
+	p_head->pack_len = sizeof(Ctl_image_timetable_t) * num + 2;
+
+	if (Commu_SendPacket(fd, p_head, sbuf) < 0)
 		return -1;
 
 	return 0;
@@ -1643,7 +1697,7 @@ int CMA_Send_WorkStatus(int fd, char *id)
 	return 0;
 }
 
-int CMA_Send_Fault_Info(int fd, char *id, char *fault_desc)
+int CMA_Send_Fault_Info(int fd, char *id, char *fault_desc, int len)
 {
 	frame_head_t f_head;
 	int cur_time = time((time_t*)NULL);
@@ -1664,9 +1718,9 @@ int CMA_Send_Fault_Info(int fd, char *id, char *fault_desc)
 
 	memset(sbuf, 0, MAX_DATA_BUFSIZE);
 	memcpy(sbuf, &cur_time, 4);
-	memcpy((sbuf + 4), fault_desc, strlen(fault_desc));
+	memcpy((sbuf + 4), fault_desc, len);
 
-	f_head.pack_len = 4 + strlen(fault_desc);
+	f_head.pack_len = 4 + len;
 
 	if (Commu_SendPacket(fd, &f_head, sbuf) < 0)
 		return -1;

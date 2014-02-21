@@ -417,7 +417,7 @@ static int Device_get_voltage(void)
 	char battery[16] = { 0 };
 	int power = 0;
 
-	fd = open(BATTERY_DEVICE, O_RDWR);
+	fd = open(BATTERY_DEVICE, O_RDONLY);
 	if (fd < 0) {
 		fprintf(stderr, "Open Battery device error.\n");
 		return -1;

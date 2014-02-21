@@ -114,6 +114,9 @@ typedef struct sensor_device {
 	struct list_head list;
 } sensor_device_t;
 
+static volatile unsigned int sensor_status = 0xff;
+static volatile unsigned int sensor_status_pre = 0xff;
+
 //#define _DEBUG
 #ifdef _DEBUG
 static void debug_out(byte *buf, int len)
@@ -144,6 +147,8 @@ int Sensor_Detect_Qixiang(void)
 		}
 	}
 
+	sensor_status = (sensor_status & (~0x1f)) | (flag & 0x1f);
+
 	return flag;
 }
 
@@ -154,6 +159,7 @@ int Sensor_Get_AlarmValue(byte type, byte index, void *value)
 	int record_len = sizeof(alarm_value_t);
 	alarm_value_t record;
 
+//	printf("Sensor_Get_AlarmValue: type = 0x%x, index = %d \n", type, index);
 	total = File_GetNumberOfRecords(FILE_ALARM_PAR, record_len);
 	if (total == 0) {
 		return -1;
@@ -193,7 +199,7 @@ static int sample_avg(int *data, int size)
 			min = data[i];
 	}
 
-	printf("total = %d, max = %d, min = %d\n", total, max, min);
+//	printf("total = %d, max = %d, min = %d\n", total, max, min);
 	avg = (double)(total - max - min) / (double)(size - 2);
 
 	return (int)(avg + 0.5);
@@ -318,8 +324,13 @@ void *sensor_sample_qixiang_1(void * arg)
 				CMA_Env_Parameter.temp = s_data.Air_Temperature;
 
 				if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 6, &f_threshold) == 0) {
-					if (s_data.Air_Temperature > f_threshold)
+//					printf("temp = %f, f_threshold = %f \n", s_data.Air_Temperature, f_threshold);
+					if (s_data.Air_Temperature > f_threshold) {
 						s_data.Alerm_Flag |= (1 << 5);
+					}
+				}
+				else {
+					printf("Sensor Get temp threshold error.\n");
 				}
 
 				if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 7, &i_threshold) == 0) {
@@ -375,7 +386,7 @@ void *sensor_sample_qixiang_1(void * arg)
 		}
 	}
 
-	s_data.Alerm_Flag = alarm;
+//	s_data.Alerm_Flag = alarm;
 
 	printf("Leave func: %s\n", __func__);
 
@@ -505,6 +516,8 @@ void *sensor_qixiang_zigbee(void * arg)
 			if (s_data.Precipitation_Intensity > f_threshold)
 				s_data.Alerm_Flag |= (1 << 9);
 		}
+
+		sensor_status |= (1 << 3);
 	}
 	else {
 		fprintf(stderr, "Sensor: read zigbee data error.\n");
@@ -628,6 +641,7 @@ int Sensor_Sample_Qixiang(void)
 		printf("降雨量： %f \n", s_data.Precipitation);
 		printf("降水强度： %f \n", s_data.Precipitation_Intensity);
 		printf("光辐射： %d \n", s_data.Radiation_Intensity);
+		printf("Alarm： 0x%x \n", s_data.Alerm_Flag);
 	}
 
 	printf("CMD: sample Weather data finished.\n");
@@ -681,9 +695,13 @@ int Sensor_Sample_TGQingXie(Data_incline_t *data)
 		}
 
 		ret = 0;
+
+		sensor_status |= (1 << 5);
 	}
-	else
+	else {
 		fprintf(stdout, "CMD: Incline Sensor is not Online.\n");
+		sensor_status &= (~(1 << 5));
+	}
 
 	fprintf(stdout, "CMD: Sample Incline data finished.\n");
 
@@ -748,6 +766,11 @@ int Sensor_Sample_FuBing(Data_ice_thickness_t *data)
 		printf("不均衡张力差： %f \n", data->Tension_Difference);
 		printf("绝缘子串风偏角： %f \n", data->Windage_Yaw_Angle);
 		printf("绝缘子串倾斜角： %f \n", data->Deflection_Angle);
+
+		sensor_status |= (1 << 6);
+	}
+	else {
+		sensor_status &= (~(1 << 6));
 	}
 
 	fprintf(stdout, "CMD: Sample Fubing data finished.\n");
@@ -851,6 +874,52 @@ int Sensor_GetData(byte *buf, int type)
 	}
 	
 	return ret;
+}
+
+static char Sensor_Fault_0[] = {0xff, 0x05, 0x02, 0x06, 0x02, 0x0b, 0x02};
+static char Sensor_Fault[][3] = {
+		{0xff, 0x05, 0x02}, /* Temperature Sensor */
+		{0xff, 0x07, 0x02}, /* Wind Speed Sensor */
+		{0xff, 0x08, 0x02}, /* Wind Direction Sensor */
+		{0xff, 0x09, 0x02}, /* Rain force Sensor */
+		{0xff, 0x0a, 0x02}, /* Radiation Sensor */
+		{0xff, 0x60, 0x02}, /* TGQX Angle Sensor */
+		{0xff, 0x10, 0x02}, /* Tension Sensor */
+		{0xff, 0x04, 0x02}, /* Camera Sensor */
+};
+
+int Sensor_FaultStatus(void)
+{
+	int i = 0, fault = 0;
+	unsigned int status = sensor_status_pre ^ sensor_status;
+	char *p = NULL;
+	int len = 0;
+
+//	status = status & sensor_status_pre;
+	status &= 0xff;
+	printf("Func: %s, sensor_status = 0x%08x, sensor_status_pre = 0x%08x\n", __func__, sensor_status, sensor_status_pre);
+	printf("Func: %s, status = 0x%08x\n", __func__, status);
+	for (i = 0; i < 8; i++) {
+		fault = (status >> 1) & 0x01;
+		if (fault) {
+			if (i == 0) {
+				p = Sensor_Fault_0;
+				len = 7;
+			}
+			else {
+				p = Sensor_Fault[i];
+				len = 3;
+			}
+
+			p[0] = ((sensor_status >> i) & 0x01) ? 0x00 : 0xff;
+			if (CMA_Send_Fault_Info(CMA_Env_Parameter.socket_fd, CMA_Env_Parameter.id, p, len) < 0)
+				printf("CMD: Send Fault Message error.\n");
+		}
+	}
+
+	sensor_status_pre = sensor_status;
+
+	return 0;
 }
 
 static int can_socket_init(char *interface)
@@ -1145,9 +1214,12 @@ int Camera_GetImages(char *ImageName, byte presetting, byte channel)
 
 	ret = v4l2_capture_image (ImageName, 720, 576, par.Luminance, par.Contrast, par.Saturation);
 	if (ret < 0) {
+		sensor_status &= (~(1 << 7));
 		fprintf(stderr, "CMD: Capture an Image error.\n");
 		return -1;
 	}
+	else
+		sensor_status |= (1 << 7);
 
 	if (par.Color_Select ==0 ) {
 		memset(cmdshell, 0, 128);
@@ -1217,6 +1289,42 @@ int Camera_SetParameter(Ctl_image_device_t *par)
 
 	len = sizeof(Ctl_image_device_t);
 	if (write(fd, par, len) != len)
+		ret = -1;
+
+	File_Close(fd);
+
+	return ret;
+}
+
+int Camera_GetTimeTable(byte *buf, int *num)
+{
+	int fd;
+	int len = sizeof(Ctl_image_timetable_t);
+	int ret = 0;
+	char *recordFile = FILE_IMAGE_TIMETABLE0;
+	int count = 0;
+
+	printf("Enter func: %s ------\n", __func__);
+
+	if (File_Exist(recordFile) == 0)
+		return -1;
+
+	if (buf == NULL)
+		return -1;
+
+	count = File_GetNumberOfRecords(FILE_ALARM_PAR, len);
+	if (count == 0) {
+		*num = 0;
+		return 0;
+	}
+
+	*num = count;
+
+	fd = File_Open(recordFile);
+	if (fd < 0)
+		return -1;
+
+	if (read(fd, buf, len * count) != (len * count))
 		ret = -1;
 
 	File_Close(fd);
@@ -1418,12 +1526,45 @@ int Camera_SetTimetable(Ctl_image_timetable_t *tb, byte groups, byte channel)
 	return ret;
 }
 
-int Camera_GetImageName(char *filename, byte channel, byte presetting)
+static char *Image_folder = "/CMD_Data/images/";
+
+static void Camera_ImageClear(void)
 {
-	char *folder = "/CMD_Data/images/";
-//	char *folder = "data-";
+	char *folder = Image_folder;
+	char cmd[256] = { 0 };
 	time_t now;
 	struct tm *tm;
+
+	now = time((time_t*)NULL);
+	now = now - 60 * 60 * 24 * 60; /* 60 days ago */
+	if (now < 0) {
+		printf("ImageClear: date error.\n");
+		return;
+	}
+	tm = localtime(&now);
+
+	printf("ImageClear: Clear Date %s", asctime(tm));
+
+	memset(cmd, 0, 256);
+	sprintf(cmd, "rm -rf %simages-%d%02d%02d*", folder, (tm->tm_year + 1900), (tm->tm_mon + 1), tm->tm_mday);
+	printf("ImageClear: command shell = %s \n", cmd);
+	system(cmd);
+
+	return;
+}
+
+int Camera_GetImageName(char *filename, byte channel, byte presetting)
+{
+	char *folder = Image_folder;
+	char cmd[256] = { 0 };
+	time_t now;
+	struct tm *tm;
+
+	if (access(folder, F_OK) < 0) {
+		printf("CMD: Image Folder %s does't exist.\n", folder);
+		sprintf(cmd, "mkdir -p %s", folder);
+		system(cmd);
+	}
 
 	if (filename == NULL)
 		return -1;
@@ -1433,9 +1574,10 @@ int Camera_GetImageName(char *filename, byte channel, byte presetting)
 	tm = localtime(&now);
 
 	memset(filename, 0, 256);
-//	sprintf(filename, "%simages-%d-%d-%d.jpg", folder, (int)now, channel, presetting);
 	sprintf(filename, "%simages-%d%02d%02d%02d%02d%02d-%d-%d.jpg", folder, (tm->tm_year + 1900), (tm->tm_mon + 1), tm->tm_mday,
 			tm->tm_hour, tm->tm_min, tm->tm_sec, channel, presetting);
+
+	Camera_ImageClear();
 
 	return 0;
 }

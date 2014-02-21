@@ -49,7 +49,9 @@ int CMA_DeviceId_SetReq_Response(int fd, byte *rbuf);
 int CMA_DeviceRset_Response(int fd, byte *rbuf);
 int CMA_WakeupTime_Response(int fd, byte *rbuf);
 int CMA_SetImagePar_Response(int fd, byte *rbuf);
+int CMA_GetImagePar_Response(int fd, byte *rbuf);
 int CMA_CaptureTimetable_Response(int fd, byte *rbuf);
+int CMA_GetImageTimeTable_Response(int fd, byte *rbuf);
 int CMA_ManualCapture_Response(int fd, byte *rbuf);
 int CMA_Image_SendRequest(int fd, char *imageName, byte channel, byte presetting);
 int CMA_Image_SendImageFile(int fd, char *ImageFile, byte channel, byte presetting);
@@ -60,7 +62,7 @@ int CMA_Video_StopStart_Response(int fd, byte *rbuf);
 int CMA_Send_HeartBeat(int fd, char *id);
 int CMA_Send_BasicInfo(int fd, char *id, int wait);
 int CMA_Send_WorkStatus(int fd, char *id);
-int CMA_Send_Fault_Info(int fd, char *id, char *fault_desc);
+int CMA_Send_Fault_Info(int fd, char *id, char *fault_desc, int len);
 
 #ifdef __cplusplus
 } /* extern "C" */
