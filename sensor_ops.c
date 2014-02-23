@@ -253,10 +253,11 @@ static void get_wind_data(Data_qixiang_t *data)
 			if (r_sec.speed_sec > data->Extreme_WindSpeed)
 				data->Extreme_WindSpeed = r_sec.speed_sec;
 		}
-	}
 
-	/* ?????????? */
-	data->Standard_WindSpeed = data->Extreme_WindSpeed;
+		File_GetRecordByIndex(RECORD_FILE_WINDSEC, &r_sec, r_len, (r_num - 1));
+		if (r_sec.tm > (now - 60 * 5))
+			data->Standard_WindSpeed = r_sec.speed_sec;
+	}
 
 	if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 1, &f_threshold) == 0) {
 		if (data->Average_WindSpeed_10min > f_threshold)
@@ -436,8 +437,8 @@ void *sensor_sample_windSec(void * arg)
 		memset(buf, 0, 64);
 		if (Sensor_Can_ReadData(Sensor_CAN_List_Qixiang[1].addr, buf) == 0) {
 			speed[i] = (buf[6] << 8) | buf[7];
-			printf("Sample: i = %d, state = 0x%x\n", i, buf[18]);
-			printf("Sample: speed = %d\n", speed[i]);
+			printf("Windy Sample: i = %d, state = 0x%x\n", i, buf[18]);
+			printf("Windy Sample: speed = %d\n", speed[i]);
 		}
 		if (i == 2) {
 			record.speed_sec = (speed[0] + speed[1] + speed[2]) / 3;
@@ -458,10 +459,11 @@ void *sensor_sample_windAvg(void * arg)
 {
 	int i = 0;
 	byte buf[64];
-	int flag = *((int *)arg);
 	int speed[10], speed_d[10];
 	struct record_winavg record;
 	int record_len = 0;
+
+	printf("---------------------- Enter: %s ------------------\n", __func__);
 
 	memset(&record, 0, sizeof(struct record_winavg));
 	record.tm = rtc_get_time();
@@ -469,18 +471,17 @@ void *sensor_sample_windAvg(void * arg)
 	memset(speed_d, 0, 10);
 
 	for (i = 0; i < 10; i++) {
-		if ((flag & 0x2) == 0x02) {
-			memset(buf, 0, 64);
-			if (Sensor_Can_ReadData(Sensor_CAN_List_Qixiang[1].addr, buf) == 0) {
-				speed[i] = (buf[6] << 8) | buf[7];
-				speed_d[i] = (buf[8] << 8) | buf[9];
-				printf("Sample: i = %d, state = 0x%x\n", i, buf[18]);
-				printf("Sample: speed = %d, speed_d = %d\n", speed[i], speed_d[i]);
-			}
-			if (i == 9) {
-				record.speed_avg = slid_avg(speed, 10, 0.3, 0);
-				record.speed_d_avg = slid_avg(speed_d, 10, 0.3, 1);
-			}
+		memset(buf, 0, 64);
+		if (Sensor_Can_ReadData(Sensor_CAN_List_Qixiang[1].addr, buf) == 0) {
+			speed[i] = (buf[6] << 8) | buf[7];
+			speed_d[i] = (buf[8] << 8) | buf[9];
+			printf("Windy Average Sample: i = %d, state = 0x%x\n", i, buf[18]);
+			printf("Windy Average Sample: speed = %d, speed_d = %d\n", speed[i], speed_d[i]);
+		}
+		if (i == 9) {
+			record.speed_avg = slid_avg(speed, 10, 0.3, 0);
+			record.speed_d_avg = slid_avg(speed_d, 10, 0.3, 1);
+			printf("Windy Average: speed_avg = %d, speed_d_avg = %d\n", record.speed_avg, record.speed_d_avg);
 		}
 
 		if (i < 9)
@@ -491,6 +492,8 @@ void *sensor_sample_windAvg(void * arg)
 	if (File_AppendRecord(RECORD_FILE_WINDAVG, (char *)&record, record_len) < 0) {
 		printf("CMD: Recording wind average speed data error.\n");
 	}
+
+	printf("---------------------- Leave: %s ------------------\n", __func__);
 
 	return 0;
 }
@@ -586,6 +589,7 @@ int Sensor_Sample_Qixiang(void)
 			else
 				expect = mktime(tm) + 60 * 60;
 			wind_avg.expect = expect;
+//			wind_avg.expect = now + 5;
 			tm = gmtime(&expect);
 			printf("WindAverage: Expect, %s", asctime(tm));
 
@@ -717,6 +721,7 @@ int Sensor_Sample_FuBing(Data_ice_thickness_t *data)
 	int record_len = 0;
 	int s_num = sizeof(Sensor_CAN_List_PullForce) / sizeof(struct can_device);
 	int i;
+	float f_threshold = 0.0;
 
 	memset(&record, 0, sizeof(struct record_fubing));
 	record.tm = rtc_get_time();
@@ -749,11 +754,31 @@ int Sensor_Sample_FuBing(Data_ice_thickness_t *data)
 
 	if (ret == 0) {
 		data->Tension = force;
-		data->Windage_Yaw_Angle = (float)angle_x / 10;
-		data->Deflection_Angle = (float)angle_y / 10;
+		data->Windage_Yaw_Angle = (float)angle_x / 100;
+		data->Deflection_Angle = (float)angle_y / 100;
 		data->Tension_Difference = wav_cycle;
 		data->Reserve1 = wav_x;
 		data->Reserve2 = wav_y;
+
+		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_FUBING_PAR, 1, &f_threshold) == 0) {
+			if (data->Tension > f_threshold)
+				data->Alerm_Flag |= (1 << 0);
+		}
+
+		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_FUBING_PAR, 2, &f_threshold) == 0) {
+			if (data->Windage_Yaw_Angle > f_threshold)
+				data->Alerm_Flag |= (1 << 1);
+		}
+
+		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_FUBING_PAR, 3, &f_threshold) == 0) {
+			if (data->Deflection_Angle > f_threshold)
+				data->Alerm_Flag |= (1 << 2);
+		}
+
+		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_FUBING_PAR, 4, &f_threshold) == 0) {
+			if (data->Tension_Difference > f_threshold)
+				data->Alerm_Flag |= (1 << 3);
+		}
 
 		record_len = sizeof(struct record_incline);
 		memcpy(&record.data, data, sizeof(Data_ice_thickness_t));
@@ -900,8 +925,9 @@ int Sensor_FaultStatus(void)
 	printf("Func: %s, sensor_status = 0x%08x, sensor_status_pre = 0x%08x\n", __func__, sensor_status, sensor_status_pre);
 	printf("Func: %s, status = 0x%08x\n", __func__, status);
 	for (i = 0; i < 8; i++) {
-		fault = (status >> 1) & 0x01;
+		fault = (status >> i) & 0x01;
 		if (fault) {
+			printf("Fault Message: i = %d \n", i);
 			if (i == 0) {
 				p = Sensor_Fault_0;
 				len = 7;
@@ -1312,7 +1338,7 @@ int Camera_GetTimeTable(byte *buf, int *num)
 	if (buf == NULL)
 		return -1;
 
-	count = File_GetNumberOfRecords(FILE_ALARM_PAR, len);
+	count = File_GetNumberOfRecords(recordFile, len);
 	if (count == 0) {
 		*num = 0;
 		return 0;
@@ -1324,8 +1350,11 @@ int Camera_GetTimeTable(byte *buf, int *num)
 	if (fd < 0)
 		return -1;
 
-	if (read(fd, buf, len * count) != (len * count))
-		ret = -1;
+	ret = read(fd, buf, len * count);
+//	if (read(fd, buf, len * count) != (len * count))
+//		ret = -1;
+
+//	printf("len = %d, count = %d\n", len, count);
 
 	File_Close(fd);
 

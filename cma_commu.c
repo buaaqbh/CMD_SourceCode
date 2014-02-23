@@ -24,7 +24,7 @@ typedef struct __reponse_data {
 	int res;
 }Response_data;
 
-static Response_data resData[14];
+static Response_data resData[15];
 static volatile int upgradeLostFlag = 0;
 byte imageRbuf[MAX_COMBUF_SIZE];
 static volatile int imageRcvLen = 0;
@@ -235,6 +235,9 @@ static int CMD_GetMsgTypeIndex(byte type)
 	case CMA_MSG_TYPE_STATUS_WORK:
 		index = 13;
 		break;
+	case CMA_MSG_TYPE_STATUS_ERROR:
+		index = 14;
+		break;
 	default:
 		printf("Invalid Sensor tyep.\n");
 		break;
@@ -365,6 +368,8 @@ int CMA_Server_Process(int fd, byte *rbuf)
 				ret = -1;
 			break;
 		case CMA_MSG_TYPE_IMAGE_GET_TIME:
+			if (CMA_GetImageTimeTable_Response(fd, rbuf) < 0)
+				ret = -1;
 			break;
 		default:
 			ret = -1;
@@ -1271,7 +1276,6 @@ int CMA_GetImageTimeTable_Response(int fd, byte *rbuf)
 	memset(sbuf, 0, MAX_DATA_BUFSIZE);
 
 	p_head->frame_type = CMA_FRAME_TYPE_IMAGE_CTRL;
-
 
 	if (Camera_GetTimeTable((sbuf + 2), &num) < 0)
 		return -1;

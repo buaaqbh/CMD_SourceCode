@@ -46,7 +46,7 @@ int Device_Env_init(void)
 	}
 
 	id = iniparser_getstring(ini, "CMD:id", NULL);
-	if (strlen(id) != 17)
+	if (strlen(id) < 17)
 		goto fail;
 	memcpy(CMA_Env_Parameter.id, id, 17);
 
@@ -621,6 +621,16 @@ int Device_setId(byte *cmd_id, byte *c_id, usint org_id)
 
 	if ((cmd_id == NULL) || (c_id == NULL))
 		return -1;
+
+	if (strlen((char *)cmd_id) < 17)
+		return -1;
+	else if (strlen((char *)cmd_id) > 17)
+		cmd_id[17] = '\0';
+
+	if (strlen((char *)c_id) < 17)
+		return -1;
+	else if (strlen((char *)c_id) > 17)
+		c_id[17] = '\0';
 
 	ini = iniparser_load(config_file);
 	if (ini==NULL) {

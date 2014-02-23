@@ -26,6 +26,24 @@ struct list_head rtc_alarm_list;
 
 static int rtc_dev_fd = -1;
 
+static char *rtc_getDevice_name(struct rtc_alarm_dev *dev)
+{
+	if (dev == &sample_dev)
+		return "QiXiang";
+	else if (dev == &sample_dev_1)
+		return "TaGan";
+	else if (dev == &sample_dev_2)
+		return "Fubing";
+	else if (dev == &wind_sec)
+		return "Wind Seccond";
+	else if (dev == &wind_avg)
+		return "Wind Average";
+	else if (dev == &camera_dev)
+		return "Camera Caputre";
+	else
+		return NULL;
+}
+
 
 time_t mktime_k(struct tm *tm)
 {
@@ -216,8 +234,8 @@ int rtc_alarm_update(void)
 	rtc_tm = (struct rtc_time *)gmtime(&dev->expect);
 
 	{
-		printf("RTC Now  Tieme: %s", ctime(&now));
-		printf("RTC Next Alarm: %s", asctime(gmtime(&dev->expect)));
+		printf("RTC Now:  Time: %s", ctime(&now));
+		printf("RTC Next: Name: %s, Alarm: %s", rtc_getDevice_name(dev), asctime(gmtime(&dev->expect)));
 	}
 
 	/* Disable alarm interrupts */

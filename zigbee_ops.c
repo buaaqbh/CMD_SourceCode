@@ -627,7 +627,7 @@ int Sensor_Zigbee_ReadData(byte *buf, int len)
 	byte rbuf[256] = {0};
 	byte res[] = {0xa5,0x06,0x01,0x06,0x00,0x00,0x00,0x00,0x00,0x00,0xba,0xbb,0xb5};
 	int err = 0;
-	int timeout = 60;
+	int timeout = 65;
 
 	if ((buf == NULL) || (len > 256))
 		return -1;

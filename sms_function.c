@@ -20,7 +20,13 @@
 #include "types.h"
 #include "file_ops.h"
 
+#define USE_EVDO
+
+#ifdef USE_EVDO
+#define SMS_SERIAL_DEV 		"/dev/ttyUSB1"
+#else
 #define SMS_SERIAL_DEV 		"/dev/ttyUSB3"
+#endif
 #define SMS_SERIAL_SPEED 	115200
 
 #define SMS_NEWMESSAGE		"+CMTI"
@@ -106,17 +112,43 @@ int Modem_WaitResponse(int fd, char *expect, int retry)
 			}
 			printf("\n");
 		} */
-		if ((rbuf[2] != 0x5e)) {
-			if (strstr(rbuf, expect)) {
-				printf("SMS WaitResponse: found string: %s \n", expect);
-				return 0;
-			}
+		if (strstr(rbuf, expect)) {
+			printf("SMS WaitResponse: found string: %s \n", expect);
+			return 0;
 		}
 	}
 
 	return -1;
 }
 
+#ifdef USE_EVDO
+static int SMS_GetPhoneNum(char *msg, char *phone)
+{
+	char tmp[32];
+	int i, j = 0;
+	char *p = NULL;
+
+//	printf("msg: %s \n", msg);
+
+	memset(tmp, 0, 32);
+
+	p = strchr(msg, ' ');
+	if (p == NULL)
+		return -1;
+
+	p++;
+	for (i = 0; i < strlen(p); i++) {
+		if (p[i] == ',')
+			break;
+		tmp[j++] = p[i];
+	}
+
+	memcpy(phone, tmp, strlen(tmp));
+//	printf("SMS Phone Number: %s , len = %d \n", phone, strlen(phone));
+
+	return 0;
+}
+#else
 static int SMS_GetPhoneNum(char *msg, char *phone)
 {
 	int len = strlen(msg);
@@ -145,6 +177,7 @@ static int SMS_GetPhoneNum(char *msg, char *phone)
 
 	return 0;
 }
+#endif
 
 int SMS_ReadMessage(int fd, int index, char *data, char *phone)
 {
@@ -157,16 +190,22 @@ int SMS_ReadMessage(int fd, int index, char *data, char *phone)
 	int retry = 5;
 
 SMS_Retry:
-	printf("SMS Start to read Message, index = %d\n", index);
+	printf("SMS Start to read Message, index = %d, retry = %d\n", index, retry);
 	memset(cmd, 0, 256);
+#ifdef USE_EVDO
+	sprintf(cmd, "at^hcmgr=%d\r", index);
+#else
 	sprintf(cmd, "at+cmgr=%d\r", index);
+#endif
 
 	if (Modem_SendCmd(fd, cmd, 5) < 0)
 		return -1;
 
+	usleep(400 * 1000);
+	nread = 0;
 	for (i = 0; i < 5; i++) {
 		memset(rbuf, 0, 512);
-		nread = readn(fd, rbuf, 512, 2);
+		nread = readn(fd, (rbuf + nread), 512, 2);
 		if (nread < 0) {
 			if (errno == ETIME)
 				continue;
@@ -175,8 +214,14 @@ SMS_Retry:
 				return -1;
 			}
 		}
-		if (rbuf[2] != 0x5e)
+		if (strstr(rbuf, "OK")) {
 			break;
+		}
+
+		if (strstr(rbuf, "ERROR")) {
+			printf("Modem: read message error.\n");
+			return -1;
+		}
 	}
 	if (i == 5) {
 		if (retry > 0) {
@@ -192,13 +237,22 @@ SMS_Retry:
 	sp = rbuf;
 
 	while ((p = strsep(&sp, delim)) != NULL) {
+#ifdef USE_EVDO
+		if (strncmp(p, "^HCMGR", 6) == 0) {
+#else
 		if (strlen(p) > 0) {
+#endif
 //			printf("strsep: %s \n", p);
 			break;
 		}
 	}
+	if (p == NULL) return -1;
 //	printf("p = %s\nlen = %d\n", p, strlen(p));
+#ifdef USE_EVDO
+	if (memcmp(p, "^HCMGR", 5) == 0) {
+#else
 	if (memcmp(p, "+CMGR", 5) == 0) {
+#endif
 		if (SMS_GetPhoneNum(p, phone) < 0) {
 			printf("SMS Get Phone Number Error.\n");
 			return -1;
@@ -208,15 +262,24 @@ SMS_Retry:
 				break;
 			}
 		}
-//		printf("p = %s , len = %d\n", p, strlen(p));
-		if (p != NULL)
+		if (p == NULL) {
+			printf("Message Data is NULL.\n");
+		}
+		else {
+//			printf("p2 = %s , len = %d\n", p, strlen(p));
 			memcpy(data, p, strlen(p));
+		}
+
 		while ((p = strsep(&sp, delim)) != NULL) {
 			if (strlen(p) > 0) {
 				break;
 			}
 		}
-		if (memcmp(p, "OK", 2) != 0)
+		if (p != NULL) {
+			if (memcmp(p, "OK", 2) != 0)
+				return -1;
+		}
+		else
 			return -1;
 	}
 	else
@@ -233,23 +296,44 @@ int SMS_SendMessage(int fd, char *phone, char *msg)
 	char buf[256] = { 0 };
 
 	printf("SMS Start to Send Message, phone = %s, msg = %s\n", phone, msg);
+
+#ifdef USE_EVDO
 	memset(cmd, 0, 256);
-	sprintf(cmd, "AT+CMGS=\"%s\"\r\r", phone);
+	sprintf(cmd, "AT^HSMSSS=\"%s\"\r", phone);
+
 	if (Modem_SendCmd(fd, cmd, 5) < 0)
 		return -1;
 
+	usleep(500 * 1000);
+	if (Modem_WaitResponse(fd, "OK", 5) < 0) {
+		printf("SMS Wait > error.\n");
+		return -1;
+	}
+#endif
+
+	memset(cmd, 0, 256);
+#ifdef USE_EVDO
+	sprintf(cmd, "AT^HCMGS=\"%s\"\r", phone);
+#else
+	sprintf(cmd, "AT+CMGS=\"%s\"\r", phone);
+#endif
+	if (Modem_SendCmd(fd, cmd, 5) < 0)
+		return -1;
+
+	usleep(500 * 1000);
 	if (Modem_WaitResponse(fd, ">", 5) < 0) {
 		printf("SMS Wait > error.\n");
 		return -1;
 	}
 
-	usleep(10 * 1000);
+	usleep(500 * 1000);
 	memset(buf, 0, 256);
 	memcpy(buf, msg, strlen(msg));
 	buf[strlen(msg)] = 0x1a;
 	if (Modem_SendCmd(fd, buf, 5) < 0)
 		return -1;
 
+	usleep(500 * 1000);
 	if (Modem_WaitResponse(fd, "OK", 20) < 0) {
 		printf("SMS Send Message error.\n");
 		return -1;
@@ -261,14 +345,23 @@ int SMS_SendMessage(int fd, char *phone, char *msg)
 int SMS_DelMessage(int fd, int index)
 {
 	char cmd[256];
+	int retry = 5;
+	int i;
 
 	printf("SMS Start to Delet Message, index = %d\n", index);
 	memset(cmd, 0, 256);
 	sprintf(cmd, "AT+CMGD=%d\r", index);
-	if (Modem_SendCmd(fd, cmd, 5) < 0)
-		return -1;
 
-	if (Modem_WaitResponse(fd, "OK", 5) < 0) {
+	for (i = 0; i < retry; i++) {
+		if (Modem_SendCmd(fd, cmd, 5) < 0)
+			continue;
+
+		usleep(500 * 1000);
+		if (Modem_WaitResponse(fd, "OK", 3) == 0)
+			break;
+	}
+
+	if (i == retry) {
 		printf("SMS Delet Message error.\n");
 		return -1;
 	}
@@ -378,7 +471,7 @@ int SMS_CMDProcess(char *data, char *phone)
 
 	printf("CMD: command = %s, data = %s \n", p_cmd, p_data);
 
-	if (strcasecmp(p_cmd, COMMAND_SERVER) == 0) {
+	if (memcmp(p_cmd, COMMAND_SERVER, strlen(COMMAND_SERVER)) == 0) {
 		Ctl_up_device_t  up_device;
 
 		printf("SMS: Change server to: %s\n", p_data);
@@ -397,21 +490,21 @@ int SMS_CMDProcess(char *data, char *phone)
 		if (Device_setServerInfo(&up_device) < 0)
 			return -1;
 	}
-	else if (strcasecmp(p_cmd, COMMAND_RESET) == 0) {
+	else if (memcmp(p_cmd, COMMAND_RESET, strlen(COMMAND_RESET)) == 0) {
 		printf("SMS: Reset system.\n");
 //		Device_reset(0);
 		system("/sbin/reboot -d 10 &");
 	}
-	else if (strcasecmp(p_cmd, COMMAND_SETID) == 0) {
+	else if (memcmp(p_cmd, COMMAND_SETID, strlen(COMMAND_SETID)) == 0) {
 		printf("SMS: Set Device ID to: %s\n", p_data);
-		if (strlen(p_data) != 17) {
-			printf("SMS: Invalid ID Value.\n");
+		if (strlen(p_data) < 17) {
+			printf("SMS: Invalid ID Value, strlen = %d.\n", strlen(p_data));
 			return -1;
 		}
 		if (Device_setId((byte *)p_data, (byte *)CMA_Env_Parameter.c_id, CMA_Env_Parameter.org_id) < 0)
 			return -1;
 	}
-	else if (strcasecmp(p_cmd, COMMAND_ADDPHONE) == 0) {
+	else if (memcmp(p_cmd, COMMAND_ADDPHONE, strlen(COMMAND_ADDPHONE)) == 0) {
 		printf("SMS: Add Control Phone: %s\n", p_data);
 		if ((strcmp(phone, SMS_SUPERPHONE1) != 0) && (strcmp(phone, SMS_SUPERPHONE2) != 0)) {
 			printf("SMS: phone %s isn't super user.\n", phone);
@@ -420,7 +513,7 @@ int SMS_CMDProcess(char *data, char *phone)
 		if (SMS_AddPhone(p_data) < 0)
 			return -1;
 	}
-	else if (strcasecmp(p_cmd, COMMAND_DELPHONE) == 0) {
+	else if (memcmp(p_cmd, COMMAND_DELPHONE, strlen(COMMAND_DELPHONE)) == 0) {
 		printf("SMS: Del Control Phone: %s\n", p_data);
 		if ((strcmp(phone, SMS_SUPERPHONE1) != 0) && (strcmp(phone, SMS_SUPERPHONE2) != 0)) {
 			printf("SMS: phone %s isn't super user.\n", phone);
@@ -430,7 +523,7 @@ int SMS_CMDProcess(char *data, char *phone)
 			return -1;
 	}
 	else {
-		printf("SMS: Invalid SMS Command.\n");
+		printf("SMS: Invalid SMS Command, cmd = %s.\n", p_cmd);
 	}
 
 	return 0;
@@ -473,7 +566,7 @@ int SMS_ProcessMessage(int fd, char *msg)
 		}
 	}
 
-	index = (index + 1) % 20;
+//	index = (index + 1) % 20;
 	SMS_DelMessage(fd, index);
 
 	return 0;
