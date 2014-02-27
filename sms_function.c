@@ -56,13 +56,13 @@ int Modem_Init(void)
 
 	fd = uart_open_dev(SMS_SERIAL_DEV);
 	if (fd == -1) {
-		perror("Modem port open error");
+		logcat("Modem open uart: %s", strerror(errno));
 		return -1;
 	}
 
 	uart_set_speed(fd, SMS_SERIAL_SPEED);
 	if(uart_set_parity(fd, 8, 1, 'N') == -1) {
-		printf ("Set Parity Error");
+		logcat ("Set Parity Error");
 		return -1;
 	}
 
@@ -73,7 +73,7 @@ int Modem_SendCmd(int fd, char *buf, int retry)
 {
 	int i, err;
 
-//	printf("SMS: Send CMD, %s\n", buf);
+//	logcat("SMS: Send CMD, %s\n", buf);
 	for (i = 0; i < retry; i++) {
 		err = io_writen(fd, buf, strlen(buf));
 		if (err > 0)
@@ -97,23 +97,23 @@ int Modem_WaitResponse(int fd, char *expect, int retry)
 			if (errno == ETIME)
 				continue;
 			else {
-				perror("Modem read uart");
+				logcat("Modem read uart: %s", strerror(errno));
 				return -1;
 			}
 		}
 
 /*		{
-			printf("nread = %d \n", nread);
+			logcat("nread = %d \n", nread);
 			int j;
 			for (j = 0; j < nread; j++) {
 					if ((j % 16) == 0)
-							printf("\n");
-					printf("0x%x ", rbuf[j]);
+							logcat("\n");
+					logcat("0x%x ", rbuf[j]);
 			}
-			printf("\n");
+			logcat("\n");
 		} */
 		if (strstr(rbuf, expect)) {
-			printf("SMS WaitResponse: found string: %s \n", expect);
+			logcat("SMS WaitResponse: found string: %s \n", expect);
 			return 0;
 		}
 	}
@@ -128,7 +128,7 @@ static int SMS_GetPhoneNum(char *msg, char *phone)
 	int i, j = 0;
 	char *p = NULL;
 
-//	printf("msg: %s \n", msg);
+//	logcat("msg: %s \n", msg);
 
 	memset(tmp, 0, 32);
 
@@ -144,7 +144,7 @@ static int SMS_GetPhoneNum(char *msg, char *phone)
 	}
 
 	memcpy(phone, tmp, strlen(tmp));
-//	printf("SMS Phone Number: %s , len = %d \n", phone, strlen(phone));
+//	logcat("SMS Phone Number: %s , len = %d \n", phone, strlen(phone));
 
 	return 0;
 }
@@ -156,7 +156,7 @@ static int SMS_GetPhoneNum(char *msg, char *phone)
 	int i, j = 0;
 	int count = 0;
 
-//	printf("msg: %s \n", msg);
+//	logcat("msg: %s \n", msg);
 
 	memset(tmp, 0, 32);
 	for (i = 0; i < len; i++) {
@@ -173,7 +173,7 @@ static int SMS_GetPhoneNum(char *msg, char *phone)
 	if (tmp[len -1] == ',')
 		tmp[len - 1] = '\0';
 	memcpy(phone, tmp + 1, strlen(tmp) - 2);
-//	printf("SMS Phone Number: %s , len = %d \n", phone, strlen(phone));
+//	logcat("SMS Phone Number: %s , len = %d \n", phone, strlen(phone));
 
 	return 0;
 }
@@ -190,7 +190,7 @@ int SMS_ReadMessage(int fd, int index, char *data, char *phone)
 	int retry = 5;
 
 SMS_Retry:
-	printf("SMS Start to read Message, index = %d, retry = %d\n", index, retry);
+	logcat("SMS Start to read Message, index = %d, retry = %d\n", index, retry);
 	memset(cmd, 0, 256);
 #ifdef USE_EVDO
 	sprintf(cmd, "at^hcmgr=%d\r", index);
@@ -210,7 +210,7 @@ SMS_Retry:
 			if (errno == ETIME)
 				continue;
 			else {
-				perror("Modem read uart");
+				logcat("Modem read uart: %s", strerror(errno));
 				return -1;
 			}
 		}
@@ -219,7 +219,7 @@ SMS_Retry:
 		}
 
 		if (strstr(rbuf, "ERROR")) {
-			printf("Modem: read message error.\n");
+			logcat("Modem: read message error.\n");
 			return -1;
 		}
 	}
@@ -233,7 +233,7 @@ SMS_Retry:
 		return -1;
 	}
 
-//	printf("Receive: num = %d, %s \n", nread, rbuf);
+//	logcat("Receive: num = %d, %s \n", nread, rbuf);
 	sp = rbuf;
 
 	while ((p = strsep(&sp, delim)) != NULL) {
@@ -242,19 +242,19 @@ SMS_Retry:
 #else
 		if (strlen(p) > 0) {
 #endif
-//			printf("strsep: %s \n", p);
+//			logcat("strsep: %s \n", p);
 			break;
 		}
 	}
 	if (p == NULL) return -1;
-//	printf("p = %s\nlen = %d\n", p, strlen(p));
+//	logcat("p = %s\nlen = %d\n", p, strlen(p));
 #ifdef USE_EVDO
 	if (memcmp(p, "^HCMGR", 5) == 0) {
 #else
 	if (memcmp(p, "+CMGR", 5) == 0) {
 #endif
 		if (SMS_GetPhoneNum(p, phone) < 0) {
-			printf("SMS Get Phone Number Error.\n");
+			logcat("SMS Get Phone Number Error.\n");
 			return -1;
 		}
 		while ((p = strsep(&sp, delim)) != NULL) {
@@ -263,10 +263,10 @@ SMS_Retry:
 			}
 		}
 		if (p == NULL) {
-			printf("Message Data is NULL.\n");
+			logcat("Message Data is NULL.\n");
 		}
 		else {
-//			printf("p2 = %s , len = %d\n", p, strlen(p));
+//			logcat("p2 = %s , len = %d\n", p, strlen(p));
 			memcpy(data, p, strlen(p));
 		}
 
@@ -285,7 +285,7 @@ SMS_Retry:
 	else
 		return -1;
 
-	printf("SMS Read Message: phone = %s, data = %s \n", phone, data);
+	logcat("SMS Read Message: phone = %s, data = %s \n", phone, data);
 
 	return 0;
 }
@@ -295,18 +295,18 @@ int SMS_SendMessage(int fd, char *phone, char *msg)
 	char cmd[256];
 	char buf[256] = { 0 };
 
-	printf("SMS Start to Send Message, phone = %s, msg = %s\n", phone, msg);
+	logcat("SMS Start to Send Message, phone = %s, msg = %s\n", phone, msg);
 
 #ifdef USE_EVDO
 	memset(cmd, 0, 256);
-	sprintf(cmd, "AT^HSMSSS=\"%s\"\r", phone);
+	sprintf(cmd, "AT^HSMSSS=0,0,1,0\r");
 
 	if (Modem_SendCmd(fd, cmd, 5) < 0)
 		return -1;
 
 	usleep(500 * 1000);
 	if (Modem_WaitResponse(fd, "OK", 5) < 0) {
-		printf("SMS Wait > error.\n");
+		logcat("SMS Wait > error.\n");
 		return -1;
 	}
 #endif
@@ -322,7 +322,7 @@ int SMS_SendMessage(int fd, char *phone, char *msg)
 
 	usleep(500 * 1000);
 	if (Modem_WaitResponse(fd, ">", 5) < 0) {
-		printf("SMS Wait > error.\n");
+		logcat("SMS Wait > error.\n");
 		return -1;
 	}
 
@@ -335,7 +335,7 @@ int SMS_SendMessage(int fd, char *phone, char *msg)
 
 	usleep(500 * 1000);
 	if (Modem_WaitResponse(fd, "OK", 20) < 0) {
-		printf("SMS Send Message error.\n");
+		logcat("SMS Send Message error.\n");
 		return -1;
 	}
 
@@ -348,7 +348,7 @@ int SMS_DelMessage(int fd, int index)
 	int retry = 5;
 	int i;
 
-	printf("SMS Start to Delet Message, index = %d\n", index);
+	logcat("SMS Start to Delet Message, index = %d\n", index);
 	memset(cmd, 0, 256);
 	sprintf(cmd, "AT+CMGD=%d\r", index);
 
@@ -362,7 +362,7 @@ int SMS_DelMessage(int fd, int index)
 	}
 
 	if (i == retry) {
-		printf("SMS Delet Message error.\n");
+		logcat("SMS Delet Message error.\n");
 		return -1;
 	}
 
@@ -427,7 +427,7 @@ static int SMS_CheckPhone(char *phone)
 	int i;
 	char buf[16] = { 0 };
 
-	printf("Enter func: %s ------\n", __func__);
+	logcat("Enter func: %s ------\n", __func__);
 
 	if ((strcmp(phone, SMS_SUPERPHONE1) == 0) || (strcmp(phone, SMS_SUPERPHONE2) == 0)) {
 		return 0;
@@ -461,7 +461,7 @@ int SMS_CMDProcess(char *data, char *phone)
 	char *p_ip = NULL;
 	char *p_port = NULL;
 
-	printf("CMD: Receive Message, phone = %s, data = %s \n", phone, data);
+	logcat("CMD: Receive Message, phone = %s, data = %s \n", phone, data);
 
 	sp = data;
 	p = strsep(&sp, delim);
@@ -469,18 +469,18 @@ int SMS_CMDProcess(char *data, char *phone)
 	p = strsep(&sp, delim);
 	p_data = p;
 
-	printf("CMD: command = %s, data = %s \n", p_cmd, p_data);
+	logcat("CMD: command = %s, data = %s \n", p_cmd, p_data);
 
 	if (memcmp(p_cmd, COMMAND_SERVER, strlen(COMMAND_SERVER)) == 0) {
 		Ctl_up_device_t  up_device;
 
-		printf("SMS: Change server to: %s\n", p_data);
+		logcat("SMS: Change server to: %s\n", p_data);
 		sp = p_data;
 		p = strsep(&sp, delim2);
 		p_ip = p;
 		p = strsep(&sp, delim2);
 		p_port = p;
-		printf("Server: ip = %s, port = %d \n", p_ip, atoi(p_port));
+		logcat("Server: ip = %s, port = %d \n", p_ip, atoi(p_port));
 
 		if (Device_getServerInfo(&up_device) < 0)
 			return -1;
@@ -491,39 +491,39 @@ int SMS_CMDProcess(char *data, char *phone)
 			return -1;
 	}
 	else if (memcmp(p_cmd, COMMAND_RESET, strlen(COMMAND_RESET)) == 0) {
-		printf("SMS: Reset system.\n");
+		logcat("SMS: Reset system.\n");
 //		Device_reset(0);
 		system("/sbin/reboot -d 10 &");
 	}
 	else if (memcmp(p_cmd, COMMAND_SETID, strlen(COMMAND_SETID)) == 0) {
-		printf("SMS: Set Device ID to: %s\n", p_data);
+		logcat("SMS: Set Device ID to: %s\n", p_data);
 		if (strlen(p_data) < 17) {
-			printf("SMS: Invalid ID Value, strlen = %d.\n", strlen(p_data));
+			logcat("SMS: Invalid ID Value, strlen = %d.\n", strlen(p_data));
 			return -1;
 		}
 		if (Device_setId((byte *)p_data, (byte *)CMA_Env_Parameter.c_id, CMA_Env_Parameter.org_id) < 0)
 			return -1;
 	}
 	else if (memcmp(p_cmd, COMMAND_ADDPHONE, strlen(COMMAND_ADDPHONE)) == 0) {
-		printf("SMS: Add Control Phone: %s\n", p_data);
+		logcat("SMS: Add Control Phone: %s\n", p_data);
 		if ((strcmp(phone, SMS_SUPERPHONE1) != 0) && (strcmp(phone, SMS_SUPERPHONE2) != 0)) {
-			printf("SMS: phone %s isn't super user.\n", phone);
+			logcat("SMS: phone %s isn't super user.\n", phone);
 		}
 
 		if (SMS_AddPhone(p_data) < 0)
 			return -1;
 	}
 	else if (memcmp(p_cmd, COMMAND_DELPHONE, strlen(COMMAND_DELPHONE)) == 0) {
-		printf("SMS: Del Control Phone: %s\n", p_data);
+		logcat("SMS: Del Control Phone: %s\n", p_data);
 		if ((strcmp(phone, SMS_SUPERPHONE1) != 0) && (strcmp(phone, SMS_SUPERPHONE2) != 0)) {
-			printf("SMS: phone %s isn't super user.\n", phone);
+			logcat("SMS: phone %s isn't super user.\n", phone);
 		}
 
 		if (SMS_DelPhone(p_data) < 0)
 			return -1;
 	}
 	else {
-		printf("SMS: Invalid SMS Command, cmd = %s.\n", p_cmd);
+		logcat("SMS: Invalid SMS Command, cmd = %s.\n", p_cmd);
 	}
 
 	return 0;
@@ -539,7 +539,7 @@ int SMS_ProcessMessage(int fd, char *msg)
 	p = strrchr(msg, 0x2c);
 	if (p != NULL) {
 		index = atoi(p+1);
-		printf("New Message Index = %d \n", index);
+		logcat("New Message Index = %d \n", index);
 	}
 	else
 		return -1;
@@ -547,7 +547,7 @@ int SMS_ProcessMessage(int fd, char *msg)
 	memset(data, 0, 512);
 	memset(phone, 0, 32);
 	if (SMS_ReadMessage(fd, index, data, phone) < 0) {
-		printf("SMS Read message error.\n");
+		logcat("SMS Read message error.\n");
 		return -1;
 	}
 
@@ -617,7 +617,7 @@ void *SMS_WaitNewMessage(void *arg)
 		memset(rbuf, 0, 512);
 		nread = read(fd, rbuf, 512);
 		if (nread < 0) {
-			perror("Modem read uart");
+			logcat("Modem read uart: %s", strerror(errno));
 			close(fd);
 			fd = -1;
 			continue;
@@ -629,13 +629,13 @@ void *SMS_WaitNewMessage(void *arg)
 			if (strlen(p) > 0) {
 				result[num++] = p;
 				if (p[0] != 0x5e)
-					printf("p = %s\n", p);
+					logcat("p = %s\n", p);
 			}
 		}
 
 		for (i = 0; i < num; i++) {
 			if (memcmp(result[i], SMS_NEWMESSAGE, 5) == 0) {
-				fprintf(stdout, "SMS: New Message arrived.\n");
+				logcat("SMS: New Message arrived.\n");
 				usleep(100 * 1000);
 				if (SMS_ProcessMessage(fd, result[i]) < 0) {
 					close(fd);
@@ -656,7 +656,7 @@ int SMS_Init(void)
 
 	ret = pthread_create(&pid, NULL, SMS_WaitNewMessage, NULL);
 	if (ret != 0)
-		printf("CMD: can't create SMS thread.");
+		logcat("CMD: can't create SMS thread.");
 
 	return ret;
 }

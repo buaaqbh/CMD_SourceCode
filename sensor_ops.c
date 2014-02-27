@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/types.h>
@@ -117,14 +118,14 @@ typedef struct sensor_device {
 static volatile unsigned int sensor_status = 0xff;
 static volatile unsigned int sensor_status_pre = 0xff;
 
-//#define _DEBUG
+#define _DEBUG
 #ifdef _DEBUG
 static void debug_out(byte *buf, int len)
 {
 	int i;
 	for (i = 0; i < len; i++)
-		printf("0x%02x ", (unsigned char)buf[i]);
-	printf("\n");
+		logcat("0x%02x ", (unsigned char)buf[i]);
+	logcat("\n");
 }
 #endif
 
@@ -159,7 +160,7 @@ int Sensor_Get_AlarmValue(byte type, byte index, void *value)
 	int record_len = sizeof(alarm_value_t);
 	alarm_value_t record;
 
-//	printf("Sensor_Get_AlarmValue: type = 0x%x, index = %d \n", type, index);
+//	logcat("Sensor_Get_AlarmValue: type = 0x%x, index = %d \n", type, index);
 	total = File_GetNumberOfRecords(FILE_ALARM_PAR, record_len);
 	if (total == 0) {
 		return -1;
@@ -199,24 +200,24 @@ static int sample_avg(int *data, int size)
 			min = data[i];
 	}
 
-//	printf("total = %d, max = %d, min = %d\n", total, max, min);
+//	logcat("total = %d, max = %d, min = %d\n", total, max, min);
 	avg = (double)(total - max - min) / (double)(size - 2);
 
 	return (int)(avg + 0.5);
 }
 
-static void get_wind_data(Data_qixiang_t *data)
+static void CMA_GetWind_Data(Data_qixiang_t *data)
 {
+#if 0
 	struct record_winsec r_sec;
 	struct record_winavg r_avg;
 	int r_num = 0;
 	int r_len = 0;
+	time_t now = rtc_get_time();
+#endif
 	int i = 0;
-	time_t now;
 	float f_threshold = 0.0;
 	int   i_threshold = 0;
-
-	now = rtc_get_time();
 
 	data->Average_WindSpeed_10min = 0;
 	data->Average_WindDirection_10min = 0;
@@ -224,9 +225,10 @@ static void get_wind_data(Data_qixiang_t *data)
 	data->Extreme_WindSpeed = 0;
 	data->Standard_WindSpeed = 0;
 
+#if 0
 	r_len = sizeof(struct record_winavg);
 	r_num = File_GetNumberOfRecords(RECORD_FILE_WINDAVG, r_len);
-	printf("Wind Average: num = %d\n", r_num);
+	logcat("Wind Average: num = %d\n", r_num);
 	if (r_num > 0) {
 		File_GetRecordByIndex(RECORD_FILE_WINDAVG, &r_avg, r_len, (r_num - 1));
 		if (r_avg.tm > (now - 60 * 60)) {
@@ -244,7 +246,7 @@ static void get_wind_data(Data_qixiang_t *data)
 
 	r_len = sizeof(struct record_winsec);
 	r_num = File_GetNumberOfRecords(RECORD_FILE_WINDSEC, r_len);
-	printf("Wind Second: num = %d\n", r_num);
+	logcat("Wind Second: num = %d\n", r_num);
 	if (r_num > 0) {
 		for (i = (r_num - 1); i >= 0; i--) {
 			File_GetRecordByIndex(RECORD_FILE_WINDSEC, &r_sec, r_len, i);
@@ -258,6 +260,35 @@ static void get_wind_data(Data_qixiang_t *data)
 		if (r_sec.tm > (now - 60 * 5))
 			data->Standard_WindSpeed = r_sec.speed_sec;
 	}
+#else
+	{
+		byte buf[64];
+		int speed[3];
+		int speed_d[3];
+		int max = 0;
+
+		memset(speed, 0, 3);
+		memset(speed_d, 0, 3);
+		for (i = 0; i < 3; i++) {
+			memset(buf, 0, 64);
+			if (Sensor_Can_ReadData(Sensor_CAN_List_Qixiang[1].addr, buf) == 0) {
+				speed[i] = (buf[6] << 8) | buf[7];
+				speed_d[i] = (buf[8] << 8) | buf[9];
+				if (max < speed[i])
+					max = speed[i];
+				logcat("Windy Average Sample: i = %d, state = 0x%x\n", i, buf[18]);
+				logcat("Windy Average Sample: speed = %d, direction = %d\n", speed[i], speed_d[i]);			}
+			if (i < 2)
+				sleep(1);
+		}
+
+		data->Average_WindSpeed_10min = (float)(speed[0] + speed[1] + speed[2]) / 3;
+		data->Average_WindDirection_10min = speed_d[2];
+		data->Max_WindSpeed = max;
+		data->Extreme_WindSpeed = max;
+		data->Standard_WindSpeed = speed[2];
+	}
+#endif
 
 	if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 1, &f_threshold) == 0) {
 		if (data->Average_WindSpeed_10min > f_threshold)
@@ -300,7 +331,7 @@ void *sensor_sample_qixiang_1(void * arg)
 	float f_threshold = 0.0;
 	int   i_threshold = 0;
 
-	printf("Enter func: %s, flag = 0x%x\n", __func__, flag);
+	logcat("Enter func: %s, flag = 0x%x\n", __func__, flag);
 	memset(temp, 0, 6);
 	memset(humi, 0, 6);
 	memset(pres, 0, 6);
@@ -313,8 +344,8 @@ void *sensor_sample_qixiang_1(void * arg)
 				temp[i] = (buf[6] << 8) | buf[7];
 				humi[i] = (buf[8] << 8) | buf[9];
 				pres[i] = (buf[10] << 8) | buf[11];
-				printf("Sample: i = %d, state = 0x%x\n", i, buf[18]);
-				printf("Sample: temp = %d, humi = %d, press = %d\n", temp[i], humi[i], pres[i]);
+				logcat("Sample: i = %d, state = 0x%x\n", i, buf[18]);
+				logcat("Sample: temp = %d, humi = %d, press = %d\n", temp[i], humi[i], pres[i]);
 				if (buf[18] != 0)
 					alarm |= (buf[18] & 0x07) << 5;
 			}
@@ -325,13 +356,13 @@ void *sensor_sample_qixiang_1(void * arg)
 				CMA_Env_Parameter.temp = s_data.Air_Temperature;
 
 				if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 6, &f_threshold) == 0) {
-//					printf("temp = %f, f_threshold = %f \n", s_data.Air_Temperature, f_threshold);
+//					logcat("temp = %f, f_threshold = %f \n", s_data.Air_Temperature, f_threshold);
 					if (s_data.Air_Temperature > f_threshold) {
 						s_data.Alerm_Flag |= (1 << 5);
 					}
 				}
 				else {
-					printf("Sensor Get temp threshold error.\n");
+					logcat("Sensor Get temp threshold error.\n");
 				}
 
 				if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 7, &i_threshold) == 0) {
@@ -349,8 +380,8 @@ void *sensor_sample_qixiang_1(void * arg)
 			memset(buf, 0, 64);
 			if (Sensor_Can_ReadData(Sensor_CAN_List_Qixiang[4].addr, buf) == 0) {
 				radia[i] = (buf[6] << 8) | buf[7];
-				printf("Sample: i = %d, state = 0x%x\n", i, buf[18]);
-				printf("Sample: radia = %d\n", radia[i]);
+				logcat("Sample: i = %d, state = 0x%x\n", i, buf[18]);
+				logcat("Sample: radia = %d\n", radia[i]);
 				if (buf[18] != 0)
 					alarm |= (1 << 10);
 			}
@@ -371,7 +402,7 @@ void *sensor_sample_qixiang_1(void * arg)
 		if (Sensor_Can_ReadData(Sensor_CAN_List_Qixiang[3].addr, buf) == 0) {
 			s_data.Precipitation = (buf[6] << 8) | buf[7];
 			s_data.Precipitation_Intensity = (buf[8] << 8) | buf[9];
-			printf("Sample: Precipitation = %f, Intensity = %f\n", s_data.Precipitation, s_data.Precipitation_Intensity);
+			logcat("Sample: Precipitation = %f, Intensity = %f\n", s_data.Precipitation, s_data.Precipitation_Intensity);
 			if (buf[18] != 0)
 				alarm |= ((buf[18] & 0x03) << 8);
 
@@ -389,7 +420,7 @@ void *sensor_sample_qixiang_1(void * arg)
 
 //	s_data.Alerm_Flag = alarm;
 
-	printf("Leave func: %s\n", __func__);
+	logcat("Leave func: %s\n", __func__);
 
 	return 0;
 }
@@ -437,8 +468,8 @@ void *sensor_sample_windSec(void * arg)
 		memset(buf, 0, 64);
 		if (Sensor_Can_ReadData(Sensor_CAN_List_Qixiang[1].addr, buf) == 0) {
 			speed[i] = (buf[6] << 8) | buf[7];
-			printf("Windy Sample: i = %d, state = 0x%x\n", i, buf[18]);
-			printf("Windy Sample: speed = %d\n", speed[i]);
+			logcat("Windy Sample: i = %d, state = 0x%x\n", i, buf[18]);
+			logcat("Windy Sample: speed = %d\n", speed[i]);
 		}
 		if (i == 2) {
 			record.speed_sec = (speed[0] + speed[1] + speed[2]) / 3;
@@ -449,7 +480,7 @@ void *sensor_sample_windSec(void * arg)
 
 	record_len = sizeof(struct record_winsec);
 	if (File_AppendRecord(RECORD_FILE_WINDSEC, (char *)&record, record_len) < 0) {
-		printf("CMD: Recording wind speed data error.\n");
+		logcat("CMD: Recording wind speed data error.\n");
 	}
 
 	return 0;
@@ -463,7 +494,7 @@ void *sensor_sample_windAvg(void * arg)
 	struct record_winavg record;
 	int record_len = 0;
 
-	printf("---------------------- Enter: %s ------------------\n", __func__);
+	logcat("---------------------- Enter: %s ------------------\n", __func__);
 
 	memset(&record, 0, sizeof(struct record_winavg));
 	record.tm = rtc_get_time();
@@ -475,13 +506,13 @@ void *sensor_sample_windAvg(void * arg)
 		if (Sensor_Can_ReadData(Sensor_CAN_List_Qixiang[1].addr, buf) == 0) {
 			speed[i] = (buf[6] << 8) | buf[7];
 			speed_d[i] = (buf[8] << 8) | buf[9];
-			printf("Windy Average Sample: i = %d, state = 0x%x\n", i, buf[18]);
-			printf("Windy Average Sample: speed = %d, speed_d = %d\n", speed[i], speed_d[i]);
+			logcat("Windy Average Sample: i = %d, state = 0x%x\n", i, buf[18]);
+			logcat("Windy Average Sample: speed = %d, speed_d = %d\n", speed[i], speed_d[i]);
 		}
 		if (i == 9) {
 			record.speed_avg = slid_avg(speed, 10, 0.3, 0);
 			record.speed_d_avg = slid_avg(speed_d, 10, 0.3, 1);
-			printf("Windy Average: speed_avg = %d, speed_d_avg = %d\n", record.speed_avg, record.speed_d_avg);
+			logcat("Windy Average: speed_avg = %d, speed_d_avg = %d\n", record.speed_avg, record.speed_d_avg);
 		}
 
 		if (i < 9)
@@ -490,19 +521,21 @@ void *sensor_sample_windAvg(void * arg)
 
 	record_len = sizeof(struct record_winavg);
 	if (File_AppendRecord(RECORD_FILE_WINDAVG, (char *)&record, record_len) < 0) {
-		printf("CMD: Recording wind average speed data error.\n");
+		logcat("CMD: Recording wind average speed data error.\n");
 	}
 
-	printf("---------------------- Leave: %s ------------------\n", __func__);
+	logcat("---------------------- Leave: %s ------------------\n", __func__);
 
 	return 0;
 }
+
+static volatile int zigbee_fault_count = 0;
 
 void *sensor_qixiang_zigbee(void * arg)
 {
 	byte buf[16];
 	float f_threshold = 0.0;
-	printf("Sensor: Get data from zigbee device.\n");
+	logcat("Sensor: Get data from zigbee device.\n");
 
 	memset(buf, 0, 16);
 	if (Sensor_Zigbee_ReadData(buf, 13) == 0) {
@@ -523,7 +556,7 @@ void *sensor_qixiang_zigbee(void * arg)
 		sensor_status |= (1 << 3);
 	}
 	else {
-		fprintf(stderr, "Sensor: read zigbee data error.\n");
+		logcat("Sensor: read zigbee data error.\n");
 	}
 
 	return 0;
@@ -535,8 +568,10 @@ int Sensor_Sample_Qixiang(void)
 	int flag;
 	pthread_t p1 = -1, p2 = -1;
 	int p1_wait = 0;
+#if 0
 	time_t now, expect;
 	struct tm *tm;
+#endif
 	struct record_qixiang record;
 	int record_len = 0;
 
@@ -545,15 +580,15 @@ int Sensor_Sample_Qixiang(void)
 	record.tm = rtc_get_time();
 	record.data.Time_Stamp = record.tm;
 
-	printf("CMD: sample Weather data start.\n");
+	logcat("CMD: sample Weather data start.\n");
 
 	/* Zigbee Sensor Operation */
 	ret = pthread_create(&p2, NULL, sensor_qixiang_zigbee, NULL);
 	if (ret != 0)
-		printf("Sensor: can't create thread.");
+		logcat("Sensor: can't create thread.");
 
 	flag = Sensor_Detect_Qixiang();
-	printf("flag = %d\n", flag);
+	logcat("flag = %d\n", flag);
 	if (flag != 0)
 		data_qixiang_flag++;
 
@@ -564,10 +599,11 @@ int Sensor_Sample_Qixiang(void)
 	if ((flag & 0x0019) != 0) {
 		ret = pthread_create(&p1, NULL, sensor_sample_qixiang_1, &flag);
 		if (ret != 0)
-			printf("Sensor: can't create thread.");
+			logcat("Sensor: can't create thread.");
 		p1_wait = 1;
 	}
 
+#if 0
 	if ((flag & 0x0004) == 0)
 		rtc_alarm_del(&wind_avg);
 	if ((flag & 0x0002) == 0)
@@ -581,7 +617,7 @@ int Sensor_Sample_Qixiang(void)
 			wind_avg.interval = 60 * 60;
 			now = rtc_get_time();
 			tm = gmtime(&now);
-			printf("WindAverage: Now, %s", asctime(tm));
+			logcat("WindAverage: Now, %s", asctime(tm));
 			tm->tm_min = 50;
 			tm->tm_sec = 0;
 			if (now < mktime(tm))
@@ -591,7 +627,7 @@ int Sensor_Sample_Qixiang(void)
 			wind_avg.expect = expect;
 //			wind_avg.expect = now + 5;
 			tm = gmtime(&expect);
-			printf("WindAverage: Expect, %s", asctime(tm));
+			logcat("WindAverage: Expect, %s", asctime(tm));
 
 			rtc_alarm_add(&wind_avg);
 			rtc_alarm_update();
@@ -603,52 +639,54 @@ int Sensor_Sample_Qixiang(void)
 			wind_sec.interval = 2 * 60;
 			now = rtc_get_time();
 			tm = gmtime(&now);
-			printf("WindSpeed: Now, %s", asctime(tm));
+			logcat("WindSpeed: Now, %s", asctime(tm));
 			expect = now - tm->tm_sec + (2 - tm->tm_min % 2) * 60;
 			wind_sec.expect = expect;
 			tm = gmtime(&expect);
-			printf("WindSpeed: Expect, %s", asctime(tm));
+			logcat("WindSpeed: Expect, %s", asctime(tm));
 
 			rtc_alarm_add(&wind_sec);
 			rtc_alarm_update();
 		}
 	}
+#endif
+
+	CMA_GetWind_Data(&s_data);
 
 	if (p1_wait) {
 		ret = pthread_join(p1, NULL);
 		if (ret != 0)
-			printf("CMD: can't join with p1 thread.");
+			logcat("CMD: can't join with p1 thread.");
 	}
 
 	ret = pthread_join(p2, NULL);
 	if (ret != 0)
-		printf("CMD: can't join with p2 thread.");
+		logcat("CMD: can't join with p2 thread.");
 
 //	data_qixiang_flag = 1;
 	if (data_qixiang_flag) {
-		get_wind_data(&s_data);
 		record_len = sizeof(struct record_qixiang);
 		memcpy(&record.data, &s_data, sizeof(Data_qixiang_t));
 		if (File_AppendRecord(RECORD_FILE_QIXIANG, (char *)&record, record_len) < 0) {
-			printf("CMD: Recording Qixiang data error.\n");
+			logcat("CMD: Recording Qixiang data error.\n");
 		}
 
-		printf("Sample Qixiang Data: \n");
-		printf("平均风速： %f \n", s_data.Average_WindSpeed_10min);
-		printf("平均风向： %d \n", s_data.Average_WindDirection_10min);
-		printf("极大风速： %f \n", s_data.Extreme_WindSpeed);
-		printf("最大风速： %f \n", s_data.Max_WindSpeed);
-		printf("标准风速： %f \n", s_data.Standard_WindSpeed);
-		printf("温 度： %f \n", s_data.Air_Temperature);
-		printf("湿 度： %d \n", s_data.Humidity);
-		printf("大气压： %f \n", s_data.Air_Pressure);
-		printf("降雨量： %f \n", s_data.Precipitation);
-		printf("降水强度： %f \n", s_data.Precipitation_Intensity);
-		printf("光辐射： %d \n", s_data.Radiation_Intensity);
-		printf("Alarm： 0x%x \n", s_data.Alerm_Flag);
+		logcat("Sample Qixiang Data: \n");
+		logcat("平均风速： %f \n", s_data.Average_WindSpeed_10min);
+		logcat("平均风向： %d \n", s_data.Average_WindDirection_10min);
+		logcat("极大风速： %f \n", s_data.Extreme_WindSpeed);
+		logcat("最大风速： %f \n", s_data.Max_WindSpeed);
+		logcat("标准风速： %f \n", s_data.Standard_WindSpeed);
+		logcat("温 度： %f \n", s_data.Air_Temperature);
+		logcat("湿 度： %d \n", s_data.Humidity);
+		logcat("大气压： %f \n", s_data.Air_Pressure);
+		logcat("降雨量： %f \n", s_data.Precipitation);
+		logcat("降水强度： %f \n", s_data.Precipitation_Intensity);
+		logcat("光辐射： %d \n", s_data.Radiation_Intensity);
+		logcat("Alarm： 0x%x \n", s_data.Alerm_Flag);
 	}
 
-	printf("CMD: sample Weather data finished.\n");
+	logcat("CMD: sample Weather data finished.\n");
 
 	return ret;
 }
@@ -666,7 +704,7 @@ int Sensor_Sample_TGQingXie(Data_incline_t *data)
 	record.tm = rtc_get_time();
 	record.data.Time_Stamp = record.tm;
 
-	fprintf(stdout, "CMD: Sample Incline data start.\n");
+	logcat("CMD: Sample Incline data start.\n");
 
 	data->Time_Stamp = record.tm;
 	memcpy(data->Component_ID, CMA_Env_Parameter.id, 17);
@@ -675,18 +713,20 @@ int Sensor_Sample_TGQingXie(Data_incline_t *data)
 	if (Sensor_Can_ReadData(Sensor_CAN_List_Angle[0].addr, buf) == 0) {
 		angle_x = (buf[6] << 8) | buf[7];
 		angle_y = (buf[8] << 8) | buf[9];
-		printf("Sample: angle_x = %d, angle_y = %d\n", angle_x, angle_y);
+		logcat("Sample: angle_x = %d, angle_y = %d\n", angle_x, angle_y);
 
-		data->Angle_X = (float)angle_x / 100;
-		data->Angle_Y = (float)angle_y / 100;
+		data->Angle_X = asin((angle_x - 1024.0) / 819.0) * 180 / 3.14;
+		data->Angle_Y = asin((angle_y - 1024.0) / 819.0) * 180 / 3.14;
+//		data->Angle_X = angle_x / 100.0;
+//		data->Angle_Y = angle_y / 100.0;
 		record_len = sizeof(struct record_incline);
 		memcpy(&record.data, data, sizeof(Data_incline_t));
 		if (File_AppendRecord(RECORD_FILE_TGQXIE, (char *)&record, record_len) < 0) {
-			fprintf(stderr, "CMD: Recording Incline data error.\n");
+			logcat("CMD: Recording Incline data error.\n");
 		}
-		printf("Sample Incline Data: \n");
-		printf("顺线倾斜角： %f \n", data->Angle_X);
-		printf("横向倾斜角： %f \n", data->Angle_Y);
+		logcat("Sample Incline Data: \n");
+		logcat("顺线倾斜角： %f \n", data->Angle_X);
+		logcat("横向倾斜角： %f \n", data->Angle_Y);
 
 		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_TGQX_PAR, 4, &f_threshold) == 0) {
 			if (data->Angle_X > f_threshold)
@@ -703,11 +743,11 @@ int Sensor_Sample_TGQingXie(Data_incline_t *data)
 		sensor_status |= (1 << 5);
 	}
 	else {
-		fprintf(stdout, "CMD: Incline Sensor is not Online.\n");
+		logcat("CMD: Incline Sensor is not Online.\n");
 		sensor_status &= (~(1 << 5));
 	}
 
-	fprintf(stdout, "CMD: Sample Incline data finished.\n");
+	logcat("CMD: Sample Incline data finished.\n");
 
 	return ret;
 }
@@ -727,7 +767,7 @@ int Sensor_Sample_FuBing(Data_ice_thickness_t *data)
 	record.tm = rtc_get_time();
 	record.data.Time_Stamp = record.tm;
 
-	fprintf(stdout, "CMD: Sample Fu Bing data start.\n");
+	logcat("CMD: Sample Fu Bing data start.\n");
 
 	data->Time_Stamp = record.tm;
 	memcpy(data->Component_ID, CMA_Env_Parameter.id, 17);
@@ -743,19 +783,19 @@ int Sensor_Sample_FuBing(Data_ice_thickness_t *data)
 			wav_x = (buf[14] << 8) | buf[15];
 			wav_y = (buf[16] << 8) | buf[17];
 
-			printf("Sample: force = %d, angle_x = %d, angle_y = %d\n", force, angle_x, angle_y);
-			printf("Sample: wav_cycle = %d, wav_x = %d, wav_y = %d\n", wav_cycle, wav_x, wav_y);
+			logcat("Sample: force = %d, angle_x = %d, angle_y = %d\n", force, angle_x, angle_y);
+			logcat("Sample: wav_cycle = %d, wav_x = %d, wav_y = %d\n", wav_cycle, wav_x, wav_y);
 
 			ret = 0;
 		}
 		else
-			fprintf(stdout, "CMD: FuBing %d Sensor is not Online.\n", i);
+			logcat("CMD: FuBing %d Sensor is not Online.\n", i);
 	}
 
 	if (ret == 0) {
-		data->Tension = force;
-		data->Windage_Yaw_Angle = (float)angle_x / 100;
-		data->Deflection_Angle = (float)angle_y / 100;
+		data->Tension = force * 9.8; // force: kgf, Tension: N
+		data->Windage_Yaw_Angle = asin((angle_x - 1024.0) / 819.0) * 180 / 3.14;
+		data->Deflection_Angle = asin((angle_y - 1024.0) / 819.0) * 180 / 3.14;
 		data->Tension_Difference = wav_cycle;
 		data->Reserve1 = wav_x;
 		data->Reserve2 = wav_y;
@@ -783,14 +823,14 @@ int Sensor_Sample_FuBing(Data_ice_thickness_t *data)
 		record_len = sizeof(struct record_incline);
 		memcpy(&record.data, data, sizeof(Data_ice_thickness_t));
 		if (File_AppendRecord(RECORD_FILE_FUBING, (char *)&record, record_len) < 0) {
-			fprintf(stderr, "CMD: Recording Incline data error.\n");
+			logcat("CMD: Recording Incline data error.\n");
 		}
-		printf("Sample Fubing Data: \n");
-		printf("等值覆冰厚度： %f \n", data->Equal_IceThickness);
-		printf("综合悬挂载荷： %f \n", data->Tension);
-		printf("不均衡张力差： %f \n", data->Tension_Difference);
-		printf("绝缘子串风偏角： %f \n", data->Windage_Yaw_Angle);
-		printf("绝缘子串倾斜角： %f \n", data->Deflection_Angle);
+		logcat("Sample Fubing Data: \n");
+		logcat("等值覆冰厚度： %f \n", data->Equal_IceThickness);
+		logcat("综合悬挂载荷： %f \n", data->Tension);
+		logcat("不均衡张力差： %f \n", data->Tension_Difference);
+		logcat("绝缘子串风偏角： %f \n", data->Windage_Yaw_Angle);
+		logcat("绝缘子串倾斜角： %f \n", data->Deflection_Angle);
 
 		sensor_status |= (1 << 6);
 	}
@@ -798,7 +838,7 @@ int Sensor_Sample_FuBing(Data_ice_thickness_t *data)
 		sensor_status &= (~(1 << 6));
 	}
 
-	fprintf(stdout, "CMD: Sample Fubing data finished.\n");
+	logcat("CMD: Sample Fubing data finished.\n");
 
 	return ret;
 }
@@ -808,7 +848,7 @@ int Sensor_GetData(byte *buf, int type)
 	byte sensor_buf[MAX_DATA_BUFSIZE];
 	int ret = 0;
 	
-	fprintf(stdout, "Enter func: %s, type = %d \n", __func__, type);
+	logcat("Enter func: %s, type = %d \n", __func__, type);
 
 	memset(sensor_buf, 0, MAX_DATA_BUFSIZE);
 	
@@ -893,7 +933,7 @@ int Sensor_GetData(byte *buf, int type)
 		}
 		break;
 	default:
-		printf("Invalid Sensor tyep.\n");
+		logcat("Invalid Sensor tyep.\n");
 		ret = -1;
 		break;
 	}
@@ -922,12 +962,12 @@ int Sensor_FaultStatus(void)
 
 //	status = status & sensor_status_pre;
 	status &= 0xff;
-	printf("Func: %s, sensor_status = 0x%08x, sensor_status_pre = 0x%08x\n", __func__, sensor_status, sensor_status_pre);
-	printf("Func: %s, status = 0x%08x\n", __func__, status);
+	logcat("Func: %s, sensor_status = 0x%08x, sensor_status_pre = 0x%08x\n", __func__, sensor_status, sensor_status_pre);
+	logcat("Func: %s, status = 0x%08x\n", __func__, status);
 	for (i = 0; i < 8; i++) {
 		fault = (status >> i) & 0x01;
 		if (fault) {
-			printf("Fault Message: i = %d \n", i);
+			logcat("Fault Message: i = %d \n", i);
 			if (i == 0) {
 				p = Sensor_Fault_0;
 				len = 7;
@@ -938,8 +978,16 @@ int Sensor_FaultStatus(void)
 			}
 
 			p[0] = ((sensor_status >> i) & 0x01) ? 0x00 : 0xff;
+			if (i == 3) {
+				if (p[0] == 0xff)
+					zigbee_fault_count++;
+				else
+					zigbee_fault_count = 0;
+				if (zigbee_fault_count < 5)
+					continue;
+			}
 			if (CMA_Send_Fault_Info(CMA_Env_Parameter.socket_fd, CMA_Env_Parameter.id, p, len) < 0)
-				printf("CMD: Send Fault Message error.\n");
+				logcat("CMD: Send Fault Message error.\n");
 		}
 	}
 
@@ -982,11 +1030,11 @@ static int can_socket_init(char *interface)
 /*  int s_buf_size = 64 * 1024;
     unsigned int m = sizeof(s_buf_size);
 	if (setsockopt(s, SOL_SOCKET, SO_SNDBUF, (char *)&s_buf_size, sizeof(int)) < 0) {
-		printf("setsockopt fail to change SNDbuf.\n");
+		logcat("setsockopt fail to change SNDbuf.\n");
 		return -1;
 	}
 	getsockopt(s, SOL_SOCKET, SO_SNDBUF, (void *)&s_buf_size, &m);
-	printf("Socket Write Buffer size = %d \n", s_buf_size);
+	logcat("Socket Write Buffer size = %d \n", s_buf_size);
 */
 	return s;
 }
@@ -1006,7 +1054,7 @@ int Can_Send(byte *buf, int len)
 		return -1;
 
 	if (len > 8) {
-		printf("Can Send buf length larger than 8, set to 8.\n");
+		logcat("Can Send buf length larger than 8, set to 8.\n");
 		len = 8;
 	}
 
@@ -1048,10 +1096,10 @@ int Can_Recv(byte *buf)
 		}
 		memcpy(pbuf, frame.data, frame.can_dlc);
 		pbuf += frame.can_dlc;
-		printf("nbytes = %d, dlc = %d\n", nbytes, frame.can_dlc);
+		logcat("nbytes = %d, dlc = %d\n", nbytes, frame.can_dlc);
 		for (i = 0; i < 8; i++)
-			printf("0x%02x ", frame.data[i]);
-		printf("\n");
+			logcat("0x%02x ", frame.data[i]);
+		logcat("\n");
 	}
 
 	close(s);
@@ -1069,7 +1117,7 @@ int Sensor_Can_ReadData(usint addr, byte *buf)
 	byte *pbuf = NULL;
 	int timeout = 2;
 
-//	printf("--------- Enter func: %s -----------\n", __func__);
+//	logcat("--------- Enter func: %s -----------\n", __func__);
 
 	if (buf == NULL)
 		return -1;
@@ -1081,7 +1129,7 @@ int Sensor_Can_ReadData(usint addr, byte *buf)
 	cmd[7] = crc16 & 0x00ff;
 
 #ifdef _DEBUG
-	printf("CAN Sensor Send Cmd: ");
+	logcat("CAN Sensor Send Cmd: ");
 	debug_out(cmd, 8);
 #endif
 
@@ -1100,7 +1148,7 @@ int Sensor_Can_ReadData(usint addr, byte *buf)
 	ret = write(s, &frame, sizeof(frame));
 	if (ret == -1) {
 		if (errno == ENOBUFS) {
-			printf("CAN No write buffer left.\n");
+			logcat("CAN No write buffer left.\n");
 		}
 		perror("CAN Device write");
 		goto err;
@@ -1115,19 +1163,19 @@ int Sensor_Can_ReadData(usint addr, byte *buf)
 		memcpy(pbuf, frame.data, frame.can_dlc);
 		pbuf += frame.can_dlc;
 #ifdef _DEBUG
-//		printf("nbytes = %d, dlc = %d\n", ret, frame.can_dlc);
+//		logcat("nbytes = %d, dlc = %d\n", ret, frame.can_dlc);
 		int j;
 		for (j = 0; j < 8; j++)
-			printf("%02x ", frame.data[j]);
-		printf("\n");
+			logcat("%02x ", frame.data[j]);
+		logcat("\n");
 #endif
 	}
 
 	pbuf = buf + 2;
 	crc16 = RTU_CRC(pbuf, 17);
-//	printf("crc16 = %x \n", crc16);
+//	logcat("crc16 = %x \n", crc16);
 	if (crc16 != ((buf[19] << 8) | buf[20])) {
-		printf("CRC check Error.\n");
+		logcat("CRC check Error.\n");
 		goto err;
 	}
 
@@ -1164,7 +1212,7 @@ int Sensor_Can_Config(usint addr, usint t)
 	cmd[7] = crc16 & 0x00ff;
 
 #ifdef _DEBUG
-	printf("CAN Sensor Send Cmd: ");
+	logcat("CAN Sensor Send Cmd: ");
 	debug_out(cmd, 8);
 #endif
 
@@ -1193,15 +1241,15 @@ int Sensor_Can_Config(usint addr, usint t)
 		return -1;
 	}
 
-	printf("nbytes = %d, dlc = %d\n", ret, frame.can_dlc);
+	logcat("nbytes = %d, dlc = %d\n", ret, frame.can_dlc);
 	for (i = 0; i < 8; i++)
-		printf("0x%02x ", frame.data[i]);
-	printf("\n");
+		logcat("0x%02x ", frame.data[i]);
+	logcat("\n");
 
 	memcpy(rbuf, frame.data, 8);
 	crc16 = (rbuf[6] << 8) | rbuf[7];
 	if (crc16 != RTU_CRC(rbuf, 6)) {
-		printf("CRC Check error.\n");
+		logcat("CRC Check error.\n");
 		close(s);
 		return -1;
 	}
@@ -1230,7 +1278,7 @@ int Camera_GetImages(char *ImageName, byte presetting, byte channel)
 
 	memset(&par, 0, sizeof(Ctl_image_device_t));
 	if (Camera_GetParameter(&par) < 0) {
-		fprintf(stderr, "CMD: Can't read image parameters, use default.\n");
+		logcat("CMD: Can't read image parameters, use default.\n");
 		par.Color_Select = 1;
 		par.Resolution = 2;
 		par.Luminance = 50;
@@ -1241,7 +1289,7 @@ int Camera_GetImages(char *ImageName, byte presetting, byte channel)
 	ret = v4l2_capture_image (ImageName, 720, 576, par.Luminance, par.Contrast, par.Saturation);
 	if (ret < 0) {
 		sensor_status &= (~(1 << 7));
-		fprintf(stderr, "CMD: Capture an Image error.\n");
+		logcat("CMD: Capture an Image error.\n");
 		return -1;
 	}
 	else
@@ -1280,7 +1328,7 @@ int Camera_GetParameter(Ctl_image_device_t *par)
 	int len = 0;
 	int ret = 0;
 
-	printf("Enter func: %s ------\n", __func__);
+	logcat("Enter func: %s ------\n", __func__);
 
 	if (File_Exist(FILE_IMAGECAPTURE_PAR) == 0)
 		return -1;
@@ -1304,7 +1352,7 @@ int Camera_SetParameter(Ctl_image_device_t *par)
 	int len = 0;
 	int ret = 0;
 
-	printf("Enter func: %s ------\n", __func__);
+	logcat("Enter func: %s ------\n", __func__);
 
 	if (File_Exist(FILE_IMAGECAPTURE_PAR))
 		File_Delete(FILE_IMAGECAPTURE_PAR);
@@ -1330,7 +1378,7 @@ int Camera_GetTimeTable(byte *buf, int *num)
 	char *recordFile = FILE_IMAGE_TIMETABLE0;
 	int count = 0;
 
-	printf("Enter func: %s ------\n", __func__);
+	logcat("Enter func: %s ------\n", __func__);
 
 	if (File_Exist(recordFile) == 0)
 		return -1;
@@ -1354,7 +1402,7 @@ int Camera_GetTimeTable(byte *buf, int *num)
 //	if (read(fd, buf, len * count) != (len * count))
 //		ret = -1;
 
-//	printf("len = %d, count = %d\n", len, count);
+//	logcat("len = %d, count = %d\n", len, count);
 
 	File_Close(fd);
 
@@ -1375,7 +1423,7 @@ void *camera_caputre_func(void *arg)
 	byte channel = 1;
 
 	memset(imageName, 0, 256);
-	printf("Enter func: %s ------\n", __func__);
+	logcat("Enter func: %s ------\n", __func__);
 
 	if (File_Exist(recordFile) == 0)
 		return 0;
@@ -1423,7 +1471,7 @@ int Camera_NextTimer(void)
 	struct tm *tm;
 	int ret;
 
-	printf("Enter func: %s ------\n", __func__);
+	logcat("Enter func: %s ------\n", __func__);
 
 	if (File_Exist(recordFile) == 0)
 		return 0;
@@ -1453,7 +1501,7 @@ int Camera_NextTimer(void)
 	else {
 		lseek(fd, 0, SEEK_SET);
 		if ((ret = read(fd, &data, len)) <= 0) {
-			fprintf(stderr, "CMD: Read Camera Caputer timetable error.\n");
+			logcat("CMD: Read Camera Caputer timetable error.\n");
 		}
 		expect = now + 24 * 60 * 60;
 		tm = localtime(&expect);
@@ -1475,9 +1523,9 @@ int Camera_NextTimer(void)
 	camera_dev.expect = expect;
 
 	tm = localtime(&now);
-	printf("Camera Capture: Now, %s", asctime(tm));
+	logcat("Camera Capture: Now, %s", asctime(tm));
 	tm = localtime(&expect);
-	printf("Camera Capture: Expect, %s", asctime(tm));
+	logcat("Camera Capture: Expect, %s", asctime(tm));
 
 	rtc_alarm_add(&camera_dev);
 	rtc_alarm_update();
@@ -1497,7 +1545,7 @@ int Camera_SetTimetable(Ctl_image_timetable_t *tb, byte groups, byte channel)
 	Ctl_image_timetable_t *data = NULL;
 	char *recordFile = FILE_IMAGE_TIMETABLE0;
 
-	printf("Enter func: %s ------\n", __func__);
+	logcat("Enter func: %s ------\n", __func__);
 
 	if (File_Exist(recordFile))
 		File_Delete(recordFile);
@@ -1512,7 +1560,7 @@ int Camera_SetTimetable(Ctl_image_timetable_t *tb, byte groups, byte channel)
 		return -1;
 	fbp = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	if (fbp == MAP_FAILED) {
-		printf("file mmap error.\n");
+		logcat("file mmap error.\n");
 		File_Close(fd);
 		return -1;
 	}
@@ -1525,7 +1573,7 @@ int Camera_SetTimetable(Ctl_image_timetable_t *tb, byte groups, byte channel)
 			if (data->Hour == 255)
 				break;
 			if (((char *)data + len) > (fbp + size)) {
-				fprintf(stderr, "Never reach here, if here, wrong.\n");
+				logcat("Never reach here, if here, wrong.\n");
 				return -1;
 			}
 			t2 = (data->Hour * 60 << 8) + (data->Minute << 8) + data->Presetting_No;
@@ -1545,7 +1593,7 @@ int Camera_SetTimetable(Ctl_image_timetable_t *tb, byte groups, byte channel)
 	}
 
 	if (munmap(fbp, size) < 0) {
-		printf("file munmap error.\n");
+		logcat("file munmap error.\n");
 	}
 
 	File_Close(fd);
@@ -1567,16 +1615,16 @@ static void Camera_ImageClear(void)
 	now = time((time_t*)NULL);
 	now = now - 60 * 60 * 24 * 60; /* 60 days ago */
 	if (now < 0) {
-		printf("ImageClear: date error.\n");
+		logcat("ImageClear: date error.\n");
 		return;
 	}
 	tm = localtime(&now);
 
-	printf("ImageClear: Clear Date %s", asctime(tm));
+	logcat("ImageClear: Clear Date %s", asctime(tm));
 
 	memset(cmd, 0, 256);
 	sprintf(cmd, "rm -rf %simages-%d%02d%02d*", folder, (tm->tm_year + 1900), (tm->tm_mon + 1), tm->tm_mday);
-	printf("ImageClear: command shell = %s \n", cmd);
+	logcat("ImageClear: command shell = %s \n", cmd);
 	system(cmd);
 
 	return;
@@ -1590,7 +1638,7 @@ int Camera_GetImageName(char *filename, byte channel, byte presetting)
 	struct tm *tm;
 
 	if (access(folder, F_OK) < 0) {
-		printf("CMD: Image Folder %s does't exist.\n", folder);
+		logcat("CMD: Image Folder %s does't exist.\n", folder);
 		sprintf(cmd, "mkdir -p %s", folder);
 		system(cmd);
 	}
@@ -1621,7 +1669,7 @@ int Camera_StartCapture(char *filename, byte channel, byte presetting)
 	if (Camera_GetImages(filename, presetting, channel) < 0)
 		return -1;
 
-	printf("Get Images: fileName = %s\n", filename);
+	logcat("Get Images: fileName = %s\n", filename);
 
 	return 0;
 }
@@ -1630,7 +1678,7 @@ int Camera_Control(byte action, byte presetting, byte channel)
 {
 	int ret = 0;
 
-	fprintf(stdout, "Camera Control: action = %d, preSetting = %d\n", action, presetting);
+	logcat("Camera Control: action = %d, preSetting = %d\n", action, presetting);
 
 	switch (action) {
 	case CAMERA_ACTION_POWERON:
@@ -1664,7 +1712,7 @@ int Camera_Control(byte action, byte presetting, byte channel)
 		Camera_FocusNear(CAMERA_DEVICE_ADDR);
 		break;
 	default:
-		fprintf(stderr, "CMD: Invalid camera control action.\n");
+		logcat("CMD: Invalid camera control action.\n");
 		break;
 	}
 

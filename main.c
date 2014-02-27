@@ -75,16 +75,16 @@ void *socket_receive_func(void * arg)
 	byte rbuf[MAX_COMBUF_SIZE];
 	int ret;
 
-	fprintf(stdout, "Enter func: %s --\n", __func__);
+	logcat("Enter func: %s --\n", __func__);
 
 	while(1) {
 		if (CMA_Env_Parameter.socket_fd > 0) {
 			memset(rbuf, 0, MAX_DATA_BUFSIZE);
-			printf("CMD: Start to read socket message, fd = %d.\n", CMA_Env_Parameter.socket_fd);
+			logcat("CMD: Start to read socket message, fd = %d.\n", CMA_Env_Parameter.socket_fd);
 			ret = Commu_GetPacket(CMA_Env_Parameter.socket_fd, rbuf, MAX_COMBUF_SIZE, 0);
 			if (ret < 0) {
 				if (ret == -2) {
-					printf("CMD Server receive MSG error!\n");
+					logcat("CMD Server receive MSG error!\n");
 					pthread_mutex_lock(&com_mutex);
 					close(CMA_Env_Parameter.socket_fd);
 					CMA_Env_Parameter.socket_fd = -1;
@@ -95,7 +95,7 @@ void *socket_receive_func(void * arg)
 
 			sem_wait(&semEmpty);
 
-			printf("--------- writeIndex = %d --------\n", writeIndex);
+			logcat("--------- writeIndex = %d --------\n", writeIndex);
 			pthread_mutex_lock(&rcvMutex);
 			writeIndex = writeIndex % RCV_BUFFER_NUM;
 			memcpy(rcvBuffer[writeIndex], rbuf, MAX_COMBUF_SIZE);
@@ -105,7 +105,7 @@ void *socket_receive_func(void * arg)
 			sem_post(&semFull);
 
 //			if (CMA_Server_Process(CMA_Env_Parameter.socket_fd, rbuf) < 0) {
-//				printf("CMD Server Process error.\n");
+//				logcat("CMD Server Process error.\n");
 //				continue;
 //			}
 		}
@@ -120,12 +120,12 @@ void *cmd_server_func(void * arg)
 {
 	byte rbuf[MAX_COMBUF_SIZE];
 
-	fprintf(stdout, "Enter func: %s --\n", __func__);
+	logcat("Enter func: %s --\n", __func__);
 
 	while(1) {
 		sem_wait(&semFull);
 
-		printf("----- readIndex = %d --------\n", readIndex);
+		logcat("----- readIndex = %d --------\n", readIndex);
 		pthread_mutex_lock(&rcvMutex);
 		readIndex = readIndex % RCV_BUFFER_NUM;
 		memset(rbuf, 0, MAX_COMBUF_SIZE);
@@ -136,7 +136,7 @@ void *cmd_server_func(void * arg)
 		sem_post(&semEmpty);
 
 		if (CMA_Server_Process(CMA_Env_Parameter.socket_fd, rbuf) < 0) {
-			printf("CMD Server Process error.\n");
+			logcat("CMD Server Process error.\n");
 			continue;
 		}
 	}
@@ -172,32 +172,32 @@ static void CMD_Sleep(int sec)
 void *socket_heartbeat_func(void * arg)
 {
 	int ret;
-	fprintf(stdout, "Enter func: %s --\n", __func__);
+	logcat("Enter func: %s --\n", __func__);
 
 	while (1) {
-		printf("~~~~~~~~~ HeartBeat Cycle Start --------\n");
+		logcat("~~~~~~~~~ HeartBeat Cycle Start --------\n");
 		if (CMA_Env_Parameter.socket_fd < 0) {
 			pthread_mutex_lock(&com_mutex);
 			CMA_Env_Parameter.socket_fd = connect_server(CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.cma_port, CMA_Env_Parameter.s_protocal, 10);
 			pthread_mutex_unlock(&com_mutex);
-			printf("------ fd = %d\n", CMA_Env_Parameter.socket_fd);
+			logcat("------ fd = %d\n", CMA_Env_Parameter.socket_fd);
 			if (CMA_Env_Parameter.socket_fd < 0) {
-				fprintf(stdout, "CMD: Connect to server error, type: %s.\n", CMA_Env_Parameter.s_protocal ? "UDP":"TCP");
+				logcat("CMD: Connect to server error, type: %s.\n", CMA_Env_Parameter.s_protocal ? "UDP":"TCP");
 				sleep(5);
 				continue;
 			}
 		}
 
-		fprintf(stdout, "CMD: Send HeartBeat Message.\n");
+		logcat("CMD: Send HeartBeat Message.\n");
 		pthread_mutex_lock(&com_mutex);
 		if (CMA_Send_HeartBeat(CMA_Env_Parameter.socket_fd, CMA_Env_Parameter.id) < 0) {
-			fprintf(stderr, "CMD: Send HeartBeat Message error.\n");
+			logcat("CMD: Send HeartBeat Message error.\n");
 			CMA_Env_Parameter.socket_fd = -1;
 		}
 		pthread_mutex_unlock(&com_mutex);
 
 		if (CMD_status_regist == 0) {
-			fprintf(stdout, "CMD: Send Basic Info Message, regist = %d.\n", CMD_status_regist);
+			logcat("CMD: Send Basic Info Message, regist = %d.\n", CMD_status_regist);
 			CMD_Response_data = -1;
 			pthread_mutex_lock(&com_mutex);
 			ret = CMA_Send_BasicInfo(CMA_Env_Parameter.socket_fd, CMA_Env_Parameter.id, 0);
@@ -208,7 +208,7 @@ void *socket_heartbeat_func(void * arg)
 			}
 		}
 
-		printf("~~~~~~~~~ HeartBeat Sleep 60s --------\n");
+		logcat("~~~~~~~~~ HeartBeat Sleep 60s --------\n");
 		CMD_Sleep(60);
 	}
 
@@ -220,19 +220,19 @@ void *Sensor_Sample_loop_QiXiang(void * arg)
 	byte data_buf[MAX_DATA_BUFSIZE];
 	int ret;
 
-	printf("Enter func: %s\n", __func__);
+	logcat("Enter func: %s\n", __func__);
 
 	system_sleep_enable(0);
 
 	memset(data_buf, 0, MAX_DATA_BUFSIZE);
 	if (Sensor_GetData(data_buf, CMA_MSG_TYPE_DATA_QXENV) < 0) {
-		fprintf(stderr, "CMD: Sample Env Data error.\n");
+		logcat("CMD: Sample Env Data error.\n");
 	}
 	else if (CMA_Env_Parameter.socket_fd > 0) {
 //		ret = CMA_Send_SensorData(CMA_Env_Parameter.socket_fd, CMA_MSG_TYPE_DATA_QXENV, data_buf);
 		ret = CMA_Check_Send_SensorData(CMA_Env_Parameter.socket_fd, CMA_MSG_TYPE_DATA_QXENV);
 		if (ret < 0) {
-			fprintf(stderr, "CMD: Socket Send Env Data error.\n");
+			logcat("CMD: Socket Send Env Data error.\n");
 		}
 	}
 
@@ -250,19 +250,19 @@ void *Sensor_Sample_loop_TGQingXie(void * arg)
 	byte data_buf[MAX_DATA_BUFSIZE];
 	int ret;
 
-	printf("Enter func: %s\n", __func__);
+	logcat("Enter func: %s\n", __func__);
 
 	system_sleep_enable(0);
 
 	memset(data_buf, 0, MAX_DATA_BUFSIZE);
 	if (Sensor_GetData(data_buf, CMA_MSG_TYPE_DATA_TGQXIE) < 0) {
-		fprintf(stderr, "CMD: Sample Env Data error.\n");
+		logcat("CMD: Sample Env Data error.\n");
 	}
 	else if (CMA_Env_Parameter.socket_fd > 0) {
 //		ret = CMA_Send_SensorData(CMA_Env_Parameter.socket_fd, CMA_MSG_TYPE_DATA_TGQXIE, data_buf);
 		ret = CMA_Check_Send_SensorData(CMA_Env_Parameter.socket_fd, CMA_MSG_TYPE_DATA_TGQXIE);
 		if (ret < 0) {
-			fprintf(stderr, "CMD: Socket Send Env Data error.\n");
+			logcat("CMD: Socket Send Env Data error.\n");
 		}
 	}
 
@@ -278,19 +278,19 @@ void *Sensor_Sample_loop_FuBing(void * arg)
 	byte data_buf[MAX_DATA_BUFSIZE];
 	int ret;
 
-	printf("Enter func: %s\n", __func__);
+	logcat("Enter func: %s\n", __func__);
 
 	system_sleep_enable(0);
 
 	memset(data_buf, 0, MAX_DATA_BUFSIZE);
 	if (Sensor_GetData(data_buf, CMA_MSG_TYPE_DATA_FUBING) < 0) {
-		fprintf(stderr, "CMD: Sample Env Data error.\n");
+		logcat("CMD: Sample Env Data error.\n");
 	}
 	else if (CMA_Env_Parameter.socket_fd > 0) {
 //		ret = CMA_Send_SensorData(CMA_Env_Parameter.socket_fd, CMA_MSG_TYPE_DATA_FUBING, data_buf);
 		ret = CMA_Check_Send_SensorData(CMA_Env_Parameter.socket_fd, CMA_MSG_TYPE_DATA_FUBING);
 		if (ret < 0) {
-			fprintf(stderr, "CMD: Socket Send Env Data error.\n");
+			logcat("CMD: Socket Send Env Data error.\n");
 		}
 	}
 
@@ -304,10 +304,10 @@ void *Sensor_Sample_loop_FuBing(void * arg)
 void enter_sleep(int sig)
 {
 //	char *cmd_shell = "echo mem >/sys/power/state";
-//	printf("Enter func: %s\n", __func__);
+//	logcat("Enter func: %s\n", __func__);
 
 	if (System_Sleep_Enable) {
-//		printf("CMD: System Enter Sleep.\n");
+//		logcat("CMD: System Enter Sleep.\n");
 //	system(cmd_shell);
 	}
 
@@ -349,14 +349,14 @@ int main(int argc, char *argv[])
 	}
 	
 	if (Device_Env_init() < 0){
-		printf("CMD: Init Env data error.\n");
+		logcat("CMD: Init Env data error.\n");
 		return -1;
 	}
 
 	rtc_alarm_init();
 
 	l2_type = CMA_Env_Parameter.l2_type;
-	printf("L2 type: %d\n", l2_type);
+	logcat("L2 type: %d\n", l2_type);
 	switch (l2_type) {
 	case 0:
 		/* 3G Module init */
@@ -374,10 +374,10 @@ int main(int argc, char *argv[])
 			return -1;
 		break;
 	default:
-		printf("Invalid L2 interface type.\n");
+		logcat("Invalid L2 interface type.\n");
 	}
 
-	printf("Device ID: %s, Component ID: %s, Original ID: %d\n",
+	logcat("Device ID: %s, Component ID: %s, Original ID: %d\n",
 			CMA_Env_Parameter.id, CMA_Env_Parameter.c_id, CMA_Env_Parameter.org_id);
 
 	if (Device_can_init() < 0) {
@@ -390,12 +390,12 @@ int main(int argc, char *argv[])
 	pthread_spin_init(&spinlock, 0);
 
 	if (signal(SIGALRM, enter_sleep) == SIG_ERR) {
-		printf("CMD: sinal init error.\n");
+		logcat("CMD: sinal init error.\n");
 		return -1;
 	}
 
 	if (Zigbee_Device_Init() < 0) {
-		printf("Zigbee Device Init Error.\n");
+		logcat("Zigbee Device Init Error.\n");
 	}
 
 	/* Init Receive Buffer */
@@ -405,12 +405,12 @@ int main(int argc, char *argv[])
 	}
 	ret = sem_init(&semEmpty, 0, RCV_BUFFER_NUM);
 	if (ret != 0) {
-		printf("CMD: sem empty init failed \n");
+		logcat("CMD: sem empty init failed \n");
 		exit(1);
 	}
 	ret = sem_init(&semFull, 0, 0);
 	if (ret != 0) {
-		printf("CMD: sem full init failed \n");
+		logcat("CMD: sem full init failed \n");
 		exit(1);
 	}
 	pthread_mutex_init(&rcvMutex, NULL);
@@ -418,29 +418,29 @@ int main(int argc, char *argv[])
 	pthread_mutex_init(&imgMutex, NULL);
 	readIndex = writeIndex = 0;
 
-	printf("Connect to server: %s, protocal: %s\n", CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.s_protocal ? "UDP":"TCP");
+	logcat("Connect to server: %s, protocal: %s\n", CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.s_protocal ? "UDP":"TCP");
 	CMA_Env_Parameter.socket_fd = connect_server(CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.cma_port, CMA_Env_Parameter.s_protocal, 10);
 	if (CMA_Env_Parameter.socket_fd < 0) {
-		fprintf(stdout, "CMD: Connect to server error, type: %s.\n", CMA_Env_Parameter.s_protocal ? "UDP":"TCP");
+		logcat("CMD: Connect to server error, type: %s.\n", CMA_Env_Parameter.s_protocal ? "UDP":"TCP");
 	}
 
 	ret = pthread_create(&p_heartbeat, NULL, socket_heartbeat_func, NULL);
 	if (ret != 0)
-		printf("Sensor: can't create heartbeat thread.");
+		logcat("Sensor: can't create heartbeat thread.");
 
 	ret = pthread_create(&pid_socket, NULL, socket_receive_func, NULL);
 	if (ret != 0)
-		printf("Sensor: can't create receive thread.");
+		logcat("Sensor: can't create receive thread.");
 
 	for (i = 0;i < CMD_SERVERTHREAD_NUM; i++) {
 		ret = pthread_create(&pid_server[i], NULL, cmd_server_func, NULL);
 		if (ret != 0)
-			printf("Sensor: can't create server thread.");
+			logcat("Sensor: can't create server thread.");
 	}
 
 	entry = "qixiang:samp_period";
 
-	printf("Set Sampling cycle.\n");
+	logcat("Set Sampling cycle.\n");
 	/* Main Sampling data loop Timer Init */
 	if ((cycle = Device_getSampling_Cycle(entry)) < 0)
 			cycle = 10;
@@ -450,12 +450,12 @@ int main(int argc, char *argv[])
 	sample_dev.interval = cycle * 60; /* Sampling Cycle */
 	now = rtc_get_time();
 	tm = gmtime(&now);
-	printf("Now: %s", asctime(tm));
+	logcat("Now: %s", asctime(tm));
 	expect = now - tm->tm_sec - (tm->tm_min % 10) * 60;
 	expect += 10 * 60;
 //	expect = now + 10;
 	tm = gmtime(&expect);
-	printf("QiXiang Expect: %s", asctime(tm));
+	logcat("QiXiang Expect: %s", asctime(tm));
 	sample_dev.expect = expect;
 	rtc_alarm_add(&sample_dev);
 
@@ -471,7 +471,7 @@ int main(int argc, char *argv[])
 	expect = now - tm->tm_sec + (2 - tm->tm_min % 2) * 60;
 //	expect = now + 10;
 	tm = gmtime(&expect);
-	printf("TGQingXie Expect: %s", asctime(tm));
+	logcat("TGQingXie Expect: %s", asctime(tm));
 	sample_dev_1.expect = expect;
 	rtc_alarm_add(&sample_dev_1);
 
@@ -487,7 +487,7 @@ int main(int argc, char *argv[])
 	expect = now - tm->tm_sec + (2 - tm->tm_min % 2) * 60;
 //	expect = now + 10;
 	tm = gmtime(&expect);
-	printf("FuBing Expect: %s", asctime(tm));
+	logcat("FuBing Expect: %s", asctime(tm));
 	sample_dev_2.expect = expect;
 	rtc_alarm_add(&sample_dev_2);
 
@@ -500,7 +500,7 @@ int main(int argc, char *argv[])
 	while (1) {
 		sleep(60);
 //		if (rtc_alarm_isActive(&sample_dev))
-//			printf("Main Sample rtc timer is atcive.\n");
+//			logcat("Main Sample rtc timer is atcive.\n");
 	}
 
 	for (i = 0; i < RCV_BUFFER_NUM; i++) {
@@ -509,16 +509,16 @@ int main(int argc, char *argv[])
 
 	ret = pthread_join(p_heartbeat, NULL);
 	if (ret != 0)
-		printf("CMD: can't join with hearbeat thread.");
+		logcat("CMD: can't join with hearbeat thread.");
 
 	ret = pthread_join(pid_socket, NULL);
 	if (ret != 0)
-		printf("CMD: can't join with socket receive thread.");
+		logcat("CMD: can't join with socket receive thread.");
 
 	for (i = 0;i < CMD_SERVERTHREAD_NUM; i++) {
 		ret = pthread_join(pid_server[i], NULL);
 		if (ret != 0)
-			printf("CMD: can't join with server thread.");
+			logcat("CMD: can't join with server thread.");
 	}
 
 	pthread_spin_destroy(&spinlock);

@@ -26,8 +26,8 @@ static void debug_out(byte *buf, int len)
 {
 	int i;
 	for (i = 0; i < len; i++)
-		printf("0x%02x ", (unsigned char)buf[i]);
-	printf("\n");
+		logcat("0x%02x ", (unsigned char)buf[i]);
+	logcat("\n");
 }
 #endif
 
@@ -47,13 +47,13 @@ int Zigbee_Get_Device(int speed)
 
 	fd = uart_open_dev(ZIGBEE_UART_NAME);
 	if (fd == -1) {
-		perror("serial port open error");
+		logcat("serial port open error: %s", strerror(errno));
 		return -1;
 	}
 
 	uart_set_speed(fd, speed);
 	if(uart_set_parity(fd, 8, 1, 'N') == -1) {
-		printf ("Set Parity Error");
+		logcat ("Set Parity Error");
 		return -1;
 	}
 
@@ -75,15 +75,15 @@ static int zigbee_send_cmd(int fd, byte *cmd)
 	cmd[6] = sum_check(cmd, 6);
 
 #ifdef _DEBUG
-	printf("Zigbee Send Command: ");
+	logcat("Zigbee Send Command: ");
 	debug_out(cmd, 7);
 #endif
 
 	err = io_writen(fd, cmd, 7);
 	if (err > 0)
-		printf("uart write %d bytes sucess.\n", err);
+		logcat("uart write %d bytes sucess.\n", err);
 	else {
-		printf("write error, ret = %d\n", err);
+		logcat("write error, ret = %d\n", err);
 		return -1;
 	}
 
@@ -107,16 +107,16 @@ int Zigbee_Set_PanID(int fd, byte *pan_id)
 
 	if ((err = io_readn(fd, rbuf, 2, 5)) != 2) {
 		if (err < 0) {
-			perror("read uart");
+			logcat("read uart: %s", strerror(errno));
 		}
 		else {
-			printf("nread %d bytes\n", err);
+			logcat("nread %d bytes\n", err);
 		}
 		return -1;
 	}
 
 #ifdef _DEBUG
-	printf("Zigbee Cmd Return: ");
+	logcat("Zigbee Cmd Return: ");
 	debug_out(rbuf, 2);
 #endif
 
@@ -139,16 +139,16 @@ int Zigbee_Read_PanID(int fd, byte *pan_id)
 
 	if ((err = io_readn(fd, pan_id, 2, 5)) != 2) {
 		if (err < 0) {
-			perror("read uart");
+			logcat("read uart: %s", strerror(errno));
 		}
 		else {
-			printf("nread %d bytes\n", err);
+			logcat("nread %d bytes\n", err);
 		}
 		return -1;
 	}
 
 #ifdef _DEBUG
-	printf("Zigbee Cmd Return: ");
+	logcat("Zigbee Cmd Return: ");
 	debug_out(pan_id, 2);
 #endif
 
@@ -165,16 +165,16 @@ int Zigbee_Read_ShortAddr(int fd, byte *short_addr)
 
 	if ((err = io_readn(fd, short_addr, 2, 5)) != 2) {
 		if (err < 0) {
-			perror("read uart");
+			logcat("read uart: %s", strerror(errno));
 		}
 		else {
-			printf("nread %d bytes\n", err);
+			logcat("nread %d bytes\n", err);
 		}
 		return -1;
 	}
 
 #ifdef _DEBUG
-	printf("Zigbee Cmd Return: ");
+	logcat("Zigbee Cmd Return: ");
 	debug_out(short_addr, 2);
 #endif
 
@@ -204,7 +204,7 @@ int Zigbee_Set_Bitrate(int fd, int speed)
 		cmd[4] = 5;
 		break;
 	default:
-		printf("Zigbee: Invalid uart speed.\n");
+		logcat("Zigbee: Invalid uart speed.\n");
 		return -1;
 	}
 
@@ -213,16 +213,16 @@ int Zigbee_Set_Bitrate(int fd, int speed)
 
 	if ((err = io_readn(fd, rbuf, 6, 5)) != 6) {
 		if (err < 0) {
-			perror("read uart");
+			logcat("read uart: %s", strerror(errno));
 		}
 		else {
-			printf("nread %d bytes\n", err);
+			logcat("nread %d bytes\n", err);
 		}
 		return -1;
 	}
 
 #ifdef _DEBUG
-	printf("Zigbee Cmd Return: ");
+	logcat("Zigbee Cmd Return: ");
 	debug_out(rbuf, 6);
 #endif
 
@@ -246,16 +246,16 @@ int Zigbee_Read_MAC(int fd, byte *mac)
 
 	if ((err = io_readn(fd, mac, 8, 5)) != 8) {
 		if (err < 0) {
-			perror("read uart");
+			logcat("read uart: %s", strerror(errno));
 		}
 		else {
-			printf("nread %d bytes\n", err);
+			logcat("nread %d bytes\n", err);
 		}
 		return -1;
 	}
 
 #ifdef _DEBUG
-	printf("Zigbee Cmd Return: ");
+	logcat("Zigbee Cmd Return: ");
 	debug_out(mac, 8);
 #endif
 
@@ -288,16 +288,16 @@ int Zigbee_Set_type(int fd, int type)
 
 	if ((err = io_readn(fd, rbuf, 8, 10)) != 8) {
 		if (err < 0) {
-			perror("read uart");
+			logcat("read uart: %s", strerror(errno));
 		}
 		else {
-			printf("nread %d bytes\n", err);
+			logcat("nread %d bytes\n", err);
 		}
 		return -1;
 	}
 
 #ifdef _DEBUG
-	printf("Zigbee Cmd Return: ");
+	logcat("Zigbee Cmd Return: ");
 	debug_out(rbuf, 8);
 #endif
 
@@ -320,16 +320,16 @@ int Zigbee_Get_type(int fd)
 
 	if ((err = io_readn(fd, rbuf, 6, 5)) != 6) {
 		if (err < 0) {
-			perror("read uart");
+			logcat("read uart: %s", strerror(errno));
 		}
 		else {
-			printf("nread %d bytes\n", err);
+			logcat("nread %d bytes\n", err);
 		}
 		return -1;
 	}
 
 #ifdef _DEBUG
-	printf("Zigbee Cmd Return: ");
+	logcat("Zigbee Cmd Return: ");
 	debug_out(rbuf, 6);
 #endif
 
@@ -358,16 +358,16 @@ int Zigbee_Set_Channel(int fd, int channel)
 
 	if ((err = io_readn(fd, rbuf, 5, 5)) != 5) {
 		if (err < 0) {
-			perror("read uart");
+			logcat("read uart: %s", strerror(errno));
 		}
 		else {
-			printf("nread %d bytes\n", err);
+			logcat("nread %d bytes\n", err);
 		}
 		return -1;
 	}
 
 #ifdef _DEBUG
-	printf("Zigbee Cmd Return: ");
+	logcat("Zigbee Cmd Return: ");
 	debug_out(rbuf, 5);
 #endif
 
@@ -389,16 +389,16 @@ int Zigbee_Get_channel(int fd)
 
 	if ((err = io_readn(fd, rbuf, 6, 5)) != 6) {
 		if (err < 0) {
-			perror("read uart");
+			logcat("read uart: %s", strerror(errno));
 		}
 		else {
-			printf("nread %d bytes\n", err);
+			logcat("nread %d bytes\n", err);
 		}
 		return -1;
 	}
 
 #ifdef _DEBUG
-	printf("Zigbee Cmd Return: ");
+	logcat("Zigbee Cmd Return: ");
 	debug_out(rbuf, 6);
 #endif
 
@@ -422,16 +422,16 @@ int Zigbee_Set_TransType(int fd, int type)
 
 	if ((err = io_readn(fd, rbuf, 6, 5)) != 6) {
 		if (err < 0) {
-			perror("read uart");
+			logcat("read uart: %s", strerror(errno));
 		}
 		else {
-			printf("nread %d bytes\n", err);
+			logcat("nread %d bytes\n", err);
 		}
 		return -1;
 	}
 
 #ifdef _DEBUG
-	printf("Zigbee Cmd Return: ");
+	logcat("Zigbee Cmd Return: ");
 	debug_out(rbuf, 6);
 #endif
 
@@ -472,16 +472,16 @@ int Zigbee_Set_RouterAddr(int fd, usint addr)
 
 	if ((err = io_readn(fd, rbuf, 2, 5)) != 2) {
 		if (err < 0) {
-			perror("read uart");
+			logcat("read uart: %s", strerror(errno));
 		}
 		else {
-			printf("nread %d bytes\n", err);
+			logcat("nread %d bytes\n", err);
 		}
 		return -1;
 	}
 
 #ifdef _DEBUG
-	printf("Zigbee Cmd Return: ");
+	logcat("Zigbee Cmd Return: ");
 	debug_out(rbuf, 2);
 #endif
 
@@ -504,16 +504,16 @@ usint Zigbee_Read_RouterAddr(int fd)
 
 	if ((err = io_readn(fd, rbuf, 2, 5)) != 2) {
 		if (err < 0) {
-			perror("read uart");
+			logcat("read uart: %s", strerror(errno));
 		}
 		else {
-			printf("nread %d bytes\n", err);
+			logcat("nread %d bytes\n", err);
 		}
 		return -1;
 	}
 
 #ifdef _DEBUG
-	printf("Zigbee Cmd Return: ");
+	logcat("Zigbee Cmd Return: ");
 	debug_out(rbuf, 2);
 #endif
 
@@ -535,16 +535,16 @@ usint Zigbee_Test_SerialPort(int fd)
 	memset(rbuf, 0, 8);
 	if ((err = io_readn(fd, rbuf, 8, 5)) != 8) {
 		if (err < 0) {
-			perror("read uart");
+			logcat("read uart: %s", strerror(errno));
 		}
 		else {
-			printf("nread %d bytes\n", err);
+			logcat("nread %d bytes\n", err);
 		}
 		return -1;
 	}
 
 #ifdef _DEBUG
-	printf("Zigbee Cmd Return: ");
+	logcat("Zigbee Cmd Return: ");
 	debug_out(rbuf, 8);
 #endif
 
@@ -585,7 +585,7 @@ int Zigbee_Device_Init(void)
 
 
 	bitrate = Zigbee_Get_BitRate(fd);
-	printf("Zigbee Get Bitrate: %d .\n", bitrate);
+	logcat("Zigbee Get Bitrate: %d .\n", bitrate);
 
 	if (bitrate != 9600) {
 		Zigbee_Set_Bitrate(fd, 9600);
@@ -636,22 +636,22 @@ int Sensor_Zigbee_ReadData(byte *buf, int len)
 		return -1;
 
 #ifdef _DEBUG
-		printf("Zigbee Start to Read %d Bytes Data.\n", len);
+	logcat("Zigbee Start to Read %d Bytes Data.\n", len);
 #endif
 	memset(rbuf, 0, 256);
 	if ((err = io_readn(fd, rbuf, len, timeout)) != len) {
 		if (err < 0) {
-			perror("read uart");
+			logcat("read uart: %s", strerror(errno));
 		}
 		else {
-			printf("nread %d bytes\n", err);
+			logcat("nread %d bytes\n", err);
 		}
 		Zigbee_Release_Device(fd);
 		return -1;
 	}
 	else {
 #ifdef _DEBUG
-		printf("Zigbee Read Data: ");
+		logcat("Zigbee Read Data: ");
 		debug_out(rbuf, len);
 #endif
 	}

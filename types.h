@@ -26,6 +26,7 @@
 extern "C" {
 #endif
 
+#include "logcat.h"
 
 #define CMA_NEW_TEST_PLATFORM			1
 //#define CMD_SENSOR_AUTO_DETECT			1

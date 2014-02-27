@@ -36,11 +36,11 @@ static void print_message(byte *buf, int len)
 {
 	int i;
 	for(i = 0; i<len; i++) {
-		printf("0x%02x ", buf[i]);
+		logcat("0x%02x ", buf[i]);
 		if (((i+1)%16) == 0)
-			printf("\n");
+			logcat("\n");
 	}
-	printf("\n");
+	logcat("\n");
 }
 #endif
 
@@ -51,11 +51,11 @@ int Commu_GetPacket_Udp(int fd, byte *rbuf, int len, int timeout)
 	usint size;
 
 	if ((rbuf == NULL)) {
-		printf("Commu_GetPacket: Invalid parameter.\n");
+		logcat("Commu_GetPacket: Invalid parameter.\n");
 		return -1;
 	}
 
-	printf("UDP Socket Begin to receive msg, len = %d\n", len);
+	logcat("UDP Socket Begin to receive msg, len = %d\n", len);
 	memset(rbuf, 0, len);
 	if (fd == -1) {
 		return -1;
@@ -67,24 +67,24 @@ int Commu_GetPacket_Udp(int fd, byte *rbuf, int len, int timeout)
 	}
 
 	memcpy(&size, (rbuf + 2), 2);
-	printf("size = %d, ret = %d \n", size, ret);
+	logcat("size = %d, ret = %d \n", size, ret);
 	if ((size < 0) || (ret < (size + sizeof(frame_head_t) + 2)))
 		return -1;
 
 	if ((rbuf[0] != 0xA5) && (rbuf[1] != 0x5A)) {
-		printf("Invalid package head.\n");
+		logcat("Invalid package head.\n");
 		return -1;
 	}
 
 	memcpy(&crc16, (rbuf + size + sizeof(frame_head_t)), 2);
 
 	if (crc16 != RTU_CRC(rbuf, (size + sizeof(frame_head_t)))) {
-		printf("Data packagre crc error!\n");
+		logcat("Data packagre crc error!\n");
 		return -1;
 	}
 
 #ifdef _DEBUG
-	printf("Receive MSG, len = %d:\n", ret);
+	logcat("Receive MSG, len = %d:\n", ret);
 	print_message(rbuf, ret);
 #endif
 
@@ -98,7 +98,7 @@ int Commu_GetPacket(int fd, byte *rbuf, int len, int timeout)
 	usint size;
 
 	if ((rbuf == NULL)) {
-		printf("Commu_GetPacket: Invalid parameter.\n");
+		logcat("Commu_GetPacket: Invalid parameter.\n");
 		return -1;
 	}
 
@@ -110,20 +110,20 @@ int Commu_GetPacket(int fd, byte *rbuf, int len, int timeout)
 	if (CMA_Env_Parameter.s_protocal == 1)
 		return Commu_GetPacket_Udp(fd, rbuf, len, timeout);
 
-//	printf("Begin to receive msg, len = %d\n", len);
+//	logcat("Begin to receive msg, len = %d\n", len);
 	
 	ret = socket_recv(fd, rbuf, sizeof(frame_head_t), timeout);
 	if (ret < 0)
 		return ret;
 
 	memcpy(&size, (rbuf + 2), 2);
-//	printf("size = %d \n", size);
+//	logcat("size = %d \n", size);
 	if ((size < 0) || (ret != sizeof(frame_head_t))) {
 		return -1;
 	}
 	
 	if ((rbuf[0] != 0xA5) && (rbuf[1] != 0x5A)) {
-		printf("Invalid package head.\n");
+		logcat("Invalid package head.\n");
 		return -1;
 	}
 
@@ -136,12 +136,12 @@ int Commu_GetPacket(int fd, byte *rbuf, int len, int timeout)
 	memcpy(&crc16, (rbuf + size + sizeof(frame_head_t)), 2);
 
 	if (crc16 != RTU_CRC(rbuf, (size + sizeof(frame_head_t)))) {
-		printf("Data packagre crc error!\n");
+		logcat("Data packagre crc error!\n");
 		return -1;
 	}
 
 #ifdef _DEBUG
-	printf("Receive MSG, len = %d:\n", (size + 25));
+	logcat("Receive MSG, len = %d:\n", (size + 25));
 	print_message(rbuf, (size + 25));
 #endif
 
@@ -157,7 +157,7 @@ int Commu_SendPacket(int fd, frame_head_t *head, byte *data)
 	int size = 0;
 
 	if ((head == NULL) || (data == NULL)) {
-		printf("Commu_SendPacket: Invalid parameter.\n");
+		logcat("Commu_SendPacket: Invalid parameter.\n");
 		return -1;
 	}
 	memset(sbuf, 0, MAX_COMBUF_SIZE);
@@ -170,7 +170,7 @@ int Commu_SendPacket(int fd, frame_head_t *head, byte *data)
 	memcpy((sbuf + size), &crc16, 2);
 	size += 2;
 #ifdef _DEBUG
-	printf("Send MSG, len = %d:\n", size);
+	logcat("Send MSG, len = %d:\n", size);
 	print_message(sbuf, size);
 #endif
 
@@ -182,9 +182,9 @@ int Commu_SendPacket(int fd, frame_head_t *head, byte *data)
 	pthread_mutex_lock(&sndMutex);
 	ret = socket_send(fd, sbuf, size, timeout);
 	pthread_mutex_unlock(&sndMutex);
-	printf("Socket Send Data: ret = %d, size = %d\n", ret, size);
+	logcat("Socket Send Data: ret = %d, size = %d\n", ret, size);
 	if (ret <= 0) {
-		printf("Send Package: send error.\n");
+		logcat("Send Package: send error.\n");
 		return -1;
 	}
 
@@ -239,7 +239,7 @@ static int CMD_GetMsgTypeIndex(byte type)
 		index = 14;
 		break;
 	default:
-		printf("Invalid Sensor tyep.\n");
+		logcat("Invalid Sensor tyep.\n");
 		break;
 	}
 
@@ -268,13 +268,13 @@ int CMA_Server_Process(int fd, byte *rbuf)
 	byte status = 0;
 	int ret = 0;
 
-	printf("Enter func: %s \n", __func__);
+	logcat("Enter func: %s \n", __func__);
 	memcpy(id, f_head->id, 17);
-	fprintf(stdout, "CMD: Receive Message, id = %s, frame type = 0x%x, msg type = 0x%x\n",
+	logcat("CMD: Receive Message, id = %s, frame type = 0x%x, msg type = 0x%x\n",
 						id, f_head->frame_type, f_head->msg_type);
 	if (CMA_MSG_TYPE_CTL_DEV_ID != msg_type) {
 		if (memcmp(f_head->id, CMA_Env_Parameter.id, 17) != 0) {
-			fprintf(stderr, "Device ID: %s, MSG ID: %s, Miss Match.\n", f_head->id, CMA_Env_Parameter.id);
+			logcat("Device ID: %s, MSG ID: %s, Miss Match.\n", f_head->id, CMA_Env_Parameter.id);
 			return -1;
 		}
 	}
@@ -332,7 +332,7 @@ int CMA_Server_Process(int fd, byte *rbuf)
 			break;
 		default:
 			ret = -1;
-			printf("CMA: Invalid MSG type.\n");
+			logcat("CMA: Invalid MSG type.\n");
 		}
 	}
 	else if (frame_type == CMA_FRAME_TYPE_IMAGE_CTRL) {
@@ -373,7 +373,7 @@ int CMA_Server_Process(int fd, byte *rbuf)
 			break;
 		default:
 			ret = -1;
-			printf("CMA: Invalid MSG type.\n");
+			logcat("CMA: Invalid MSG type.\n");
 		}
 	}
 	else if (frame_type == CMA_FRAME_TYPE_IMAGE) {
@@ -384,7 +384,7 @@ int CMA_Server_Process(int fd, byte *rbuf)
 	}
 	else if ((frame_type == CMA_FRAME_TYPE_DATA_RES) || (frame_type == CMA_FRAME_TYPE_STATUS_RES)) {
 		status = *(rbuf + sizeof(frame_head_t));
-		fprintf(stdout, "CMD: Send data response 0x%x.\n", status);
+		logcat("CMD: Send data response 0x%x.\n", status);
 		resData[CMD_GetMsgTypeIndex(msg_type)].msg_type = msg_type;
 		resData[CMD_GetMsgTypeIndex(msg_type)].res = status;
 		CMD_Response_data = status;
@@ -399,7 +399,7 @@ int CMA_Send_SensorData(int fd, int type, void *data)
 	frame_head_t f_head;
 	byte data_buf[MAX_DATA_BUFSIZE];
 
-	printf("CMA Send Sensor Data.\n");
+	logcat("CMA Send Sensor Data.\n");
 	memset(&f_head, 0, sizeof(frame_head_t));
 
 	f_head.head = 0x5aa5;
@@ -448,12 +448,12 @@ int CMA_Send_SensorData(int fd, int type, void *data)
 //		f_head.pack_len = sizeof(Data_dirty_t); // ? sample num: n
 		break;
 	default:
-		printf("Invalid Sensor tyep.\n");
+		logcat("Invalid Sensor tyep.\n");
 		break;
 	}
 
 	if (Commu_SendPacket(fd, &f_head, (byte *)data) < 0) {
-		fprintf(stderr, "CMD: Socket Send Data error.\n");
+		logcat("CMD: Socket Send Data error.\n");
 		return -1;
 	}
 
@@ -506,7 +506,7 @@ int CMA_Check_Send_SensorData(int fd, int type)
 	case CMA_MSG_TYPE_DATA_XCHWS:
 //		break;
 	default:
-		printf("Invalid Sensor tyep.\n");
+		logcat("Invalid Sensor tyep.\n");
 		return -1;
 	}
 
@@ -533,17 +533,17 @@ int CMA_Check_Send_SensorData(int fd, int type)
 	}
 
 	for (i = (total - 1); i >= 0; i--) {
-//		printf("total = %d, i = %d\n", total, i);
+//		logcat("total = %d, i = %d\n", total, i);
 		memset(&record, 0, record_len);
 		if (File_GetRecordByIndex(filename, &record, record_len, i) == record_len) {
-//			printf("filename = %s, record_len = %d\n", filename, record_len);
+//			logcat("filename = %s, record_len = %d\n", filename, record_len);
 			memcpy(&flag, ((byte *)&record + (record_len - 4)), 4);
 			if (flag == 0) {
 				ret = CMA_Send_SensorData(fd, type, (record + sizeof(time_t)));
 				if (ret < 0)
 					continue;
 				else if (ret == 0xff) {
-					fprintf(stdout, "CMD: Send Data reponse OK.\n");
+					logcat("CMD: Send Data reponse OK.\n");
 					flag = 0xff;
 					memcpy(((byte *)&record + record_len - 4), &flag, 4);
 					File_UpdateRecordByIndex(filename, &record, record_len, i);
@@ -551,7 +551,7 @@ int CMA_Check_Send_SensorData(int fd, int type)
 					File_GetRecordByIndex(filename, &record, record_len, i);
 					if (type == CMA_MSG_TYPE_DATA_TGQXIE) {
 						struct record_incline *p = (struct record_incline *)&record;
-						printf("After Send flag = %d \n", p->send_flag);
+						logcat("After Send flag = %d \n", p->send_flag);
 					}
 					*/
 				}
@@ -578,11 +578,11 @@ int CMA_Time_SetReq_Response(int fd, byte *rbuf)
 	
 	if (config_type == 0x01) {
 		gettimeofday (&tv , &tz);
-//		printf("Now time: %d, %s \n", (int)tv.tv_sec, asctime(gmtime(&tv.tv_sec)));
+//		logcat("Now time: %d, %s \n", (int)tv.tv_sec, asctime(gmtime(&tv.tv_sec)));
 		tv.tv_sec = mktime(gmtime(&cur_time));
-//		printf("Set time: %d, %s \n", (int)tv.tv_sec, asctime(gmtime(&cur_time)));
+//		logcat("Set time: %d, %s \n", (int)tv.tv_sec, asctime(gmtime(&cur_time)));
 		if (settimeofday(&tv, &tz) < 0)
-			printf("CMA: Set time error.\n");
+			logcat("CMA: Set time error.\n");
 		rtc_set_time(gmtime(&cur_time));
 	}
 	
@@ -690,7 +690,7 @@ static int CMA_Send_RecordingData(int fd, byte type, time_t start, time_t end)
 	case CMA_MSG_TYPE_DATA_XCHWS:
 //		break;
 	default:
-		printf("Invalid Sensor tyep.\n");
+		logcat("Invalid Sensor tyep.\n");
 		return -1;
 	}
 
@@ -704,7 +704,7 @@ static int CMA_Send_RecordingData(int fd, byte type, time_t start, time_t end)
 		if (File_GetRecordByIndex(filename, &record, record_len, (total - 1)) == record_len) {
 			ret = CMA_Send_SensorData(fd, type, (record + sizeof(time_t)));
 			if (ret == 0xff)
-				fprintf(stdout, "CMD: Send Data reponse OK.\n");
+				logcat("CMD: Send Data reponse OK.\n");
 		}
 		return 0;
 	}
@@ -726,7 +726,7 @@ static int CMA_Send_RecordingData(int fd, byte type, time_t start, time_t end)
 			if ((t <= t_max) && (t >= t_min)) {
 				ret = CMA_Send_SensorData(fd, type, (record + sizeof(time_t)));
 				if (ret == 0xff)
-					fprintf(stdout, "CMD: Send Data reponse OK.\n");
+					logcat("CMD: Send Data reponse OK.\n");
 			}
 		}
 	}
@@ -747,8 +747,8 @@ int CMA_RequestData_Response(int fd, byte *rbuf)
 	req_type = *(rbuf + sizeof(frame_head_t));
 	memcpy(&time_start, (rbuf + sizeof(frame_head_t) + 1), sizeof(int));
 	memcpy(&time_end, (rbuf + sizeof(frame_head_t) + 1 + sizeof(int)), sizeof(int));
-	fprintf(stdout, "Request Data from: %s", ctime((time_t *)&time_start));
-	fprintf(stdout, "to: %s", ctime((time_t *)&time_end));
+	logcat("Request Data from: %s", ctime((time_t *)&time_start));
+	logcat("to: %s", ctime((time_t *)&time_end));
 	
 	/*
 	 *    Response Process
@@ -764,7 +764,7 @@ int CMA_RequestData_Response(int fd, byte *rbuf)
 		return -1;
 
 	if (req_type ==  0xff) {
-		fprintf(stdout, "CMD: Send all Sensor Data.\n");
+		logcat("CMD: Send all Sensor Data.\n");
 		int i;
 		int num = sizeof(Request_data_type) / sizeof(int);
 		for (i = 0; i < num; i++) {
@@ -786,7 +786,7 @@ int CMA_SamplePar_SetReq_Response(int fd, byte *rbuf)
 	byte  set_type = *(rbuf + sizeof(frame_head_t));
 	usint cycle = 0;
 
-	printf("Enter func: %s\n", __func__);
+	logcat("Enter func: %s\n", __func__);
 
 	memset(sbuf, 0, MAX_DATA_BUFSIZE);
 	sbuf[0] = 0xff;
@@ -1024,9 +1024,9 @@ int CMA_Request_LostPackage(int fd, byte *rbuf, const char *bitmap)
 	p_head->pack_len = 4 * (num + 1);
 	pdata = (int *)(sbuf);
 	*pdata = num;
-	printf("Lost package number: %d \n", *pdata++);
+	logcat("Lost package number: %d \n", *pdata++);
 	while(*pdata != 0) {
-		printf("%d\n", *pdata++);
+		logcat("%d\n", *pdata++);
 	}
 
 	for (i = 0; i < 5; i++) {
@@ -1034,7 +1034,7 @@ int CMA_Request_LostPackage(int fd, byte *rbuf, const char *bitmap)
 		if (Commu_SendPacket(fd, p_head, sbuf) < 0)
 			return -1;
 
-		printf("---------- Get Software Upgrade Lost Packages --------------\n");
+		logcat("---------- Get Software Upgrade Lost Packages --------------\n");
 		while ((upgradeLostFlag == 0) && timeout) {
 			sleep(1);
 			--timeout;
@@ -1060,7 +1060,7 @@ static int software_update_end(int fd, byte *rbuf)
 	memcpy(filename, (rbuf + sizeof(frame_head_t)), 20);
 	memcpy(&package_num, (rbuf + sizeof(frame_head_t) + 20), 4);
 	memcpy(&time_stamp, (rbuf + sizeof(frame_head_t) + 24), 4);
-	fprintf(stdout, "Data End, Filename: %s, total num = %d, time = %d\n", filename, package_num, time_stamp);
+	logcat("Data End, Filename: %s, total num = %d, time = %d\n", filename, package_num, time_stamp);
 
 	memset(tmp_file, 0, 32);
 	memset(file_bitmap, 0, 64);
@@ -1068,7 +1068,7 @@ static int software_update_end(int fd, byte *rbuf)
 	sprintf(file_bitmap, "%s.bitmap", filename);
 
 	if (CMA_Request_LostPackage(fd, rbuf, file_bitmap) < 0) {
-		fprintf(stderr, "CMD: Send Lost Packages Request error.\n");
+		logcat("CMD: Send Lost Packages Request error.\n");
 		goto clear;
 	}
 
@@ -1101,7 +1101,7 @@ int CMA_SoftWare_Update_Response(int fd, byte *rbuf)
 		memcpy(filename, (rbuf + sizeof(frame_head_t)), 20);
 		memcpy(&package_num, (rbuf + sizeof(frame_head_t) + 20), 4);
 		memcpy(&package_index, (rbuf + sizeof(frame_head_t) + 24), 4);
-		fprintf(stdout, "Filename: %s, total num = %d, index = %d\n", filename, package_num, package_index);
+		logcat("Filename: %s, total num = %d, index = %d\n", filename, package_num, package_index);
 
 		memset(tmp_file, 0, 32);
 		memset(file_bitmap, 0, 64);
@@ -1342,7 +1342,7 @@ int CMA_Image_SendRequest(int fd, char *imageName, byte channel, byte presetting
 		return -1;
 
 	pkg_num = (size + IMAGE_SUBDATA_LEN - 1) / IMAGE_SUBDATA_LEN;
-	printf("Send Image: package num = %d, size = %d\n", pkg_num, size);
+	logcat("Send Image: package num = %d, size = %d\n", pkg_num, size);
 	req.Packet_Num = ((pkg_num & 0xff00) >> 8) | ((pkg_num & 0xff) << 8);
 
 	pthread_mutex_lock(&imgMutex);
@@ -1354,7 +1354,7 @@ int CMA_Image_SendRequest(int fd, char *imageName, byte channel, byte presetting
 		if (Commu_SendPacket(fd, &f_head, (byte *)&req) < 0)
 			return -1;
 
-		printf("---------- Get Image Request Packages --------------\n");
+		logcat("---------- Get Image Request Packages --------------\n");
 
 		timeout = 5 * 100;
 		while ((imageRcvLen == 0) && (timeout)) {
@@ -1369,11 +1369,11 @@ int CMA_Image_SendRequest(int fd, char *imageName, byte channel, byte presetting
 		}
 	}
 	if (i == 5) {
-		fprintf(stderr, "CMD: Receive Image Request Package error.\n");
+		logcat("CMD: Receive Image Request Package error.\n");
 		return -1;
 	}
 
-	fprintf(stdout, "CMD: Start to Send Image Data.\n");
+	logcat("CMD: Start to Send Image Data.\n");
 	if (CMA_Image_SendImageFile(fd, imageName, channel, presetting) < 0)
 		return -1;
 
@@ -1404,7 +1404,7 @@ int CMA_Image_SendImageFile(int fd, char *ImageFile, byte channel, byte presetti
 		return -1;
 
 	pkg_num = (size + IMAGE_SUBDATA_LEN - 1) / IMAGE_SUBDATA_LEN;
-	printf("Send Image: file = %s, package num = %d, size = %d\n", ImageFile, pkg_num, size);
+	logcat("Send Image: file = %s, package num = %d, size = %d\n", ImageFile, pkg_num, size);
 
 	memset(&f_head, 0, sizeof(frame_head_t));
 
@@ -1421,7 +1421,7 @@ int CMA_Image_SendImageFile(int fd, char *ImageFile, byte channel, byte presetti
 	for (i = 1; i <= pkg_num; i++) {
 		memset(data, 0, IMAGE_SUBDATA_LEN);
 		if ((ret = read(image_fd, &data, IMAGE_SUBDATA_LEN)) <= 0) {
-			fprintf(stderr, "CMD: Read Image file: %s error.\n", ImageFile);
+			logcat("CMD: Read Image file: %s error.\n", ImageFile);
 			break;
 		}
 
@@ -1430,7 +1430,7 @@ int CMA_Image_SendImageFile(int fd, char *ImageFile, byte channel, byte presetti
 
 		f_head.pack_len = 6 + ret;
 
-		printf("Send Image: i = %d, pkg_num = %d, len = %d, fd = %d\n", i, pkg_num, ret, fd);
+		logcat("Send Image: i = %d, pkg_num = %d, len = %d, fd = %d\n", i, pkg_num, ret, fd);
 		if (Commu_SendPacket(fd, &f_head, sbuf) < 0)
 			return -1;
 		usleep(400000);
@@ -1441,7 +1441,7 @@ int CMA_Image_SendImageFile(int fd, char *ImageFile, byte channel, byte presetti
 		return -1;
 
 	for (i = 0; i < 5; i++) {
-		printf("---------- Wait Image Lost Packages Request, i = %d --------------\n", i);
+		logcat("---------- Wait Image Lost Packages Request, i = %d --------------\n", i);
 		pthread_mutex_lock(&imgMutex);
 		memset(imageRbuf, 0, MAX_COMBUF_SIZE);
 		imageRcvLen = 0;
@@ -1455,7 +1455,7 @@ int CMA_Image_SendImageFile(int fd, char *ImageFile, byte channel, byte presetti
 			p_head = (frame_head_t *)imageRbuf;
 			if (p_head->msg_type == CMA_MSG_TYPE_IMAGE_DATA_REP) {
 				memcpy(&lost_num, (imageRbuf + sizeof(frame_head_t) + 2), 2);
-				printf("Lost Image Data: total = %d \n", lost_num);
+				logcat("Lost Image Data: total = %d \n", lost_num);
 				if (lost_num > 0) {
 					CMA_Image_SendImageLost(fd, ImageFile, imageRbuf);
 					i = 0;
@@ -1513,10 +1513,10 @@ int CMA_Image_SendImageLost(int fd, char *ImageFile, byte *rbuf)
 		memset(data, 0, IMAGE_SUBDATA_LEN);
 //		index = (index_buf[0] << 8) | index_buf[1];
 		index = (index_buf[1] << 8) | index_buf[0];
-		printf("Lost index = %d, pkg_num = %d\n", index, pkg_num);
+		logcat("Lost index = %d, pkg_num = %d\n", index, pkg_num);
 		lseek(image_fd, ((index - 1) * IMAGE_SUBDATA_LEN), SEEK_SET);
 		if ((ret = read(image_fd, &data, IMAGE_SUBDATA_LEN)) <= 0) {
-			fprintf(stderr, "CMD: Read Image file error, file = %s.\n", ImageFile);
+			logcat("CMD: Read Image file error, file = %s.\n", ImageFile);
 			break;
 		}
 
@@ -1525,7 +1525,7 @@ int CMA_Image_SendImageLost(int fd, char *ImageFile, byte *rbuf)
 
 		f_head.pack_len = 6 + ret;
 
-		printf("Send Lost Image: total = %d, index = %d, len = %d\n", total, index, ret);
+		logcat("Send Lost Image: total = %d, index = %d, len = %d\n", total, index, ret);
 		if (Commu_SendPacket(fd, &f_head, sbuf) < 0)
 			return -1;
 		usleep(400000);
@@ -1609,7 +1609,7 @@ int CMA_Send_HeartBeat(int fd, char *id)
 	int cur_time;
 
 	if (strlen(id) != 17) {
-		printf("Invalid Device ID.\n");
+		logcat("Invalid Device ID.\n");
 		return -1;
 	}
 
@@ -1635,7 +1635,7 @@ int CMA_Send_BasicInfo(int fd, char *id, int wait)
 	int ret = 0;
 
 	if (strlen(id) != 17) {
-		printf("Invalid Device ID.\n");
+		logcat("Invalid Device ID.\n");
 		return -1;
 	}
 
@@ -1659,7 +1659,7 @@ int CMA_Send_BasicInfo(int fd, char *id, int wait)
 	if (wait) {
 		ret = CMD_WaitStatus_Res(CMA_MSG_TYPE_STATUS_INFO, 5);
 		if (ret != 0xff) {
-			fprintf(stdout, "CMD: Send Basic Info Error.\n");
+			logcat("CMD: Send Basic Info Error.\n");
 			return -1;
 		}
 	}
@@ -1674,7 +1674,7 @@ int CMA_Send_WorkStatus(int fd, char *id)
 	int ret = 0;
 
 	if (strlen(id) != 17) {
-		printf("Invalid Device ID.\n");
+		logcat("Invalid Device ID.\n");
 		return -1;
 	}
 
@@ -1695,7 +1695,7 @@ int CMA_Send_WorkStatus(int fd, char *id)
 
 	ret = CMD_WaitStatus_Res(CMA_MSG_TYPE_STATUS_WORK, 5);
 	if (ret == 0xff) {
-		fprintf(stdout, "CMD: Send work status OK.\n");
+		logcat("CMD: Send work status OK.\n");
 	}
 
 	return 0;
@@ -1708,7 +1708,7 @@ int CMA_Send_Fault_Info(int fd, char *id, char *fault_desc, int len)
 	byte sbuf[MAX_DATA_BUFSIZE];
 
 	if (strlen(id) != 17) {
-		printf("Invalid Device ID.\n");
+		logcat("Invalid Device ID.\n");
 		return -1;
 	}
 

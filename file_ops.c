@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include "file_ops.h"
+#include "logcat.h"
 
 int get_file_size(const char *filename)
 {
@@ -86,7 +87,7 @@ long File_GetFreeSpace(const char *drive)
 	blocksize = diskInfo.f_bsize;
 	availableDisk = diskInfo.f_bavail * blocksize;
 
-	printf("Disk_available = %llu GB = %llu MB = %lluKB = %lluB\n",
+	logcat("Disk_available = %llu GB = %llu MB = %lluKB = %lluB\n",
 			availableDisk>>30, availableDisk>>20, availableDisk>>10, availableDisk);
 
 	return availableDisk;
@@ -97,7 +98,7 @@ int File_GetNumberOfRecords(const char *FileName, int Record_Len)
 	int size;
 
 	size = get_file_size(FileName);
-//	printf("File size = %d\n", size);
+//	logcat("File size = %d\n", size);
 	if (size == 0)
 		return 0;
 
@@ -162,7 +163,7 @@ int File_UpdateRecordByIndex(const char *FileName, void *Record, int Record_Len,
 
 	fbp = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	if (fbp == MAP_FAILED) {
-		printf("file mmap error.\n");
+		logcat("file mmap error.\n");
 		File_Close(fd);
 		return -1;
 	}
@@ -170,7 +171,7 @@ int File_UpdateRecordByIndex(const char *FileName, void *Record, int Record_Len,
 	memcpy((fbp + (Record_Len * Record_Index)), Record, Record_Len);
 
 	if (munmap(fbp, size) < 0) {
-		printf("file munmap error.\n");
+		logcat("file munmap error.\n");
 	}
 
 	File_Close(fd);
@@ -186,7 +187,7 @@ int File_DeleteRecordByIndex(const char *FileName, int Record_Len, int Record_In
 	char *to, *from;
 
 	if ((Record_Index + 1) > (size / Record_Len)) {
-		printf("File: Invalid Record Index.\n");
+		logcat("File: Invalid Record Index.\n");
 		return -1;
 	}
 
@@ -195,7 +196,7 @@ int File_DeleteRecordByIndex(const char *FileName, int Record_Len, int Record_In
 
 	fbp = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	if (fbp == MAP_FAILED) {
-		printf("file mmap error.\n");
+		logcat("file mmap error.\n");
 		File_Close(fd);
 		return -1;
 	}
@@ -205,7 +206,7 @@ int File_DeleteRecordByIndex(const char *FileName, int Record_Len, int Record_In
 	memmove(to, from, (size - (Record_Len * (Record_Index + 1))));
 
 	if (munmap(fbp, size) < 0) {
-		printf("file munmap error.\n");
+		logcat("file munmap error.\n");
 	}
 
 	File_Close(fd);
@@ -291,7 +292,7 @@ int File_UpgradeWrite_mmap(const char *FileName, int index, int data_len, void *
 
 	fbp = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	if (fbp == MAP_FAILED) {
-		printf("file mmap error.\n");
+		logcat("file mmap error.\n");
 		File_Close(fd);
 		return -1;
 	}
@@ -322,7 +323,7 @@ int File_UpgradeWrite_mmap(const char *FileName, int index, int data_len, void *
 	}
 
 	if (munmap(fbp, size) < 0) {
-		printf("file munmap error.\n");
+		logcat("file munmap error.\n");
 	}
 
 	File_Close(fd);
@@ -381,7 +382,7 @@ int File_UpdateBitmap(const char *FileName, int index, int num)
 
 	fbp = mmap(NULL, num, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	if (fbp == MAP_FAILED) {
-		printf("file mmap error.\n");
+		logcat("file mmap error.\n");
 		File_Close(fd);
 		return -1;
 	}
@@ -389,7 +390,7 @@ int File_UpdateBitmap(const char *FileName, int index, int num)
 	fbp[index - 1] = 1;
 
 	if (munmap(fbp, num) < 0) {
-		printf("file munmap error.\n");
+		logcat("file munmap error.\n");
 	}
 
 	File_Close(fd);
@@ -416,7 +417,7 @@ int File_UpdateGetLost(const char *FileName, int num, int *lost)
 
 	fbp = mmap(NULL, num, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	if (fbp == MAP_FAILED) {
-		printf("file mmap error.\n");
+		logcat("file mmap error.\n");
 		File_Close(fd);
 		return -1;
 	}
@@ -429,7 +430,7 @@ int File_UpdateGetLost(const char *FileName, int num, int *lost)
 	}
 
 	if (munmap(fbp, num) < 0) {
-		printf("file munmap error.\n");
+		logcat("file munmap error.\n");
 	}
 
 	File_Close(fd);

@@ -8,6 +8,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
+#include <errno.h>
 #include "camera_control.h"
 #include "uart_ops.h"
 #include "io_util.h"
@@ -21,7 +23,7 @@
 //#define _DEBUG
 
 #ifdef _DEBUG
-#define Enter_func()  printf("----- Enter func: %s --------\n", __func__)
+#define Enter_func()  logcat("----- Enter func: %s --------\n", __func__)
 #else
 #define Enter_func()
 #endif
@@ -31,11 +33,11 @@ static void print_message(byte *buf, int len)
 {
 	int i;
 	for(i = 0; i<len; i++) {
-		printf("0x%02x ", buf[i]);
+		logcat("0x%02x ", buf[i]);
 		if (((i+1)%16) == 0)
-			printf("\n");
+			logcat("\n");
 	}
-	printf("\n");
+	logcat("\n");
 }
 #endif
 
@@ -56,21 +58,21 @@ int Camera_SendCmd(byte *cmd, int len)
 
 	fd = uart_open_dev(UART_PORT_RS485);
 	if (fd == -1) {
-		perror("serial port open error");
+		logcat("serial port open error: %s", strerror(errno));
 		return -1;
 	}
 	uart_set_speed(fd, UART_RS485_SPEDD);
 	if(uart_set_parity(fd, 8, 1, 'N') == -1) {
-		printf ("Set Parity Error");
+		logcat ("Set Parity Error");
 		return -1;
 	}
 
 	cmd[len - 1] = checksum((cmd + 1), 5);
 	err = io_writen(fd, cmd, len);
 	if (err > 0)
-		printf("RS485: Send Command Sucess.\n");
+		logcat("RS485: Send Command Sucess.\n");
 	else {
-		printf("write error, ret = %d\n", err);
+		logcat("write error, ret = %d\n", err);
 		return -1;
 	}
 
@@ -80,9 +82,9 @@ int Camera_SendCmd(byte *cmd, int len)
     cmd_stop[6] = checksum((cmd_stop + 1), 5);
     err = io_writen(fd, cmd_stop, 7);
     if (err == 7)
-            printf("RS485: Send Stop Command Sucess.\n");
+            logcat("RS485: Send Stop Command Sucess.\n");
     else {
-            printf("write error, ret = %d\n", err);
+            logcat("write error, ret = %d\n", err);
             return -1;
     }
 
@@ -113,7 +115,7 @@ void Camera_CallPreset(byte addr, byte index)
 {
 	byte cmd[7] = {0xff, 0x01, 0x00, 0x07, 0x00, 0x01, 0x09};
 	Enter_func();
-	printf("Camera_CallPreset: index = %d \n", index);
+	logcat("Camera_CallPreset: index = %d \n", index);
 	cmd[1] = addr;
 	cmd[5] = index;
 	Camera_SendCmd(cmd, 7);
@@ -123,7 +125,7 @@ void Camera_SetPreset(byte addr, byte index)
 {
 	byte cmd[7] = {0xff, 0x01, 0x00, 0x03, 0x00, 0x01, 0x05};
 	Enter_func();
-	printf("Camera_SetPreset: index = %d \n", index);
+	logcat("Camera_SetPreset: index = %d \n", index);
 	cmd[1] = addr;
 	cmd[5] = index;
 	Camera_SendCmd(cmd, 7);

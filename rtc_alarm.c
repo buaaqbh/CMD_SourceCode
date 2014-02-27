@@ -17,6 +17,7 @@
 #include <string.h>
 #include <pthread.h>
 #include "rtc_alarm.h"
+#include "logcat.h"
 
 //#define _DEBUG
 
@@ -54,7 +55,7 @@ time_t mktime_k(struct tm *tm)
 	unsigned int min = tm->tm_min;
 	unsigned int sec = tm->tm_sec;
 
-//	printf("%d, %d, %d, %d, %d, %d\n", year, mon, day, hour, min, sec);
+//	logcat("%d, %d, %d, %d, %d, %d\n", year, mon, day, hour, min, sec);
 
 	if (0 >= (int) (mon -= 2)) {    /* 1..12 -> 11,12,1..10 */
 		mon += 12;      /* Puts Feb last since it has leap day */
@@ -112,7 +113,7 @@ int start_timer_function_thr( void * (*func)(void *) )
     pthread_attr_t tattr;
 
 #ifdef _DEBUG
-    printf("Enter func: %s.\n", __func__);
+    logcat("Enter func: %s.\n", __func__);
 #endif
 
     pthread_attr_init(&tattr);
@@ -120,7 +121,7 @@ int start_timer_function_thr( void * (*func)(void *) )
 
     ret = pthread_create( &p, &tattr, func, NULL);
     if(ret) {
-    	printf("RTC Timer function start error, ret = %d !\n", ret);
+    	logcat("RTC Timer function start error, ret = %d !\n", ret);
     	return -1;
     }
 
@@ -135,13 +136,13 @@ void rtc_trigger_alarm(time_t cur_time)
 	struct rtc_alarm_dev *dev;
 
 #ifdef _DEBUG
-	printf("Enter func: %s.\n", __func__);
+	logcat("Enter func: %s.\n", __func__);
 #endif
 
 	list_for_each(plist, &rtc_alarm_list) {
 		dev = list_entry(plist, struct rtc_alarm_dev, list);
 #ifdef _DEBUG
-		printf("%s: dev->expect = %d, cur time = %d, repeat = %d\n", __func__, dev->expect, cur_time, dev->repeat);
+		logcat("%s: dev->expect = %d, cur time = %d, repeat = %d\n", __func__, dev->expect, cur_time, dev->repeat);
 #endif
 		if (dev->expect > cur_time)
 			break;
@@ -156,7 +157,7 @@ void rtc_trigger_alarm(time_t cur_time)
 	}
 
 	if (!list_empty(&rtc_alarm_list)) {
-//		printf("rtc update ------------\n");
+//		logcat("rtc update ------------\n");
 		rtc_alarm_update();
 	}
 
@@ -172,7 +173,7 @@ void *rtc_alarm_wait(void * arg)
 	pthread_detach(pthread_self());
 
 	while (1) {
-		printf("RTC_ALARM: Wait for rtc alarm.\n");
+		logcat("RTC_ALARM: Wait for rtc alarm.\n");
 		if (read(rtc_dev_fd, &data, sizeof(unsigned long)) < 0) {
 			perror("RTC read data");
 			usleep(1000);
@@ -206,7 +207,7 @@ int rtc_alarm_init(void)
 
 	ret = pthread_create(&p1, NULL, rtc_alarm_wait, NULL);
 	if (ret != 0)
-		printf("Sensor: can't create thread.");
+		logcat("Sensor: can't create thread.");
 
 	return rtc_dev_fd;
 }
@@ -219,7 +220,7 @@ int rtc_alarm_update(void)
 	int retval;
 
 #ifdef _DEBUG
-	printf("Enter func: %s.\n", __func__);
+	logcat("Enter func: %s.\n", __func__);
 #endif
 
 	if (list_empty(&rtc_alarm_list))
@@ -229,13 +230,13 @@ int rtc_alarm_update(void)
 	dev = list_entry(rtc_alarm_list.next, struct rtc_alarm_dev, list);
 	if (dev->expect < now) {
 		dev->expect = now + 1;
-		printf("-------------Warning: rtc expect less than now ----------\n");
+		logcat("-------------Warning: rtc expect less than now ----------\n");
 	}
 	rtc_tm = (struct rtc_time *)gmtime(&dev->expect);
 
 	{
-		printf("RTC Now:  Time: %s", ctime(&now));
-		printf("RTC Next: Name: %s, Alarm: %s", rtc_getDevice_name(dev), asctime(gmtime(&dev->expect)));
+		logcat("RTC Now:  Time: %s", ctime(&now));
+		logcat("RTC Next: Name: %s, Alarm: %s", rtc_getDevice_name(dev), asctime(gmtime(&dev->expect)));
 	}
 
 	/* Disable alarm interrupts */
@@ -249,7 +250,7 @@ int rtc_alarm_update(void)
 	retval = ioctl(rtc_dev_fd, RTC_ALM_SET, rtc_tm);
 	if (retval == -1) {
 		if (errno == ENOTTY) {
-			fprintf(stderr, "\n...Alarm IRQs not supported.\n");
+			logcat("\n...Alarm IRQs not supported.\n");
 			close(rtc_dev_fd);
 		}
 		perror("RTC_ALM_SET ioctl");
@@ -272,7 +273,7 @@ int rtc_alarm_add(struct rtc_alarm_dev *timer)
 	struct rtc_alarm_dev *dev;
 
 #ifdef _DEBUG
-	printf("Enter func: %s.\n", __func__);
+	logcat("Enter func: %s.\n", __func__);
 #endif
 
 	if (rtc_alarm_isActive(timer))
@@ -296,7 +297,7 @@ int rtc_alarm_add(struct rtc_alarm_dev *timer)
 #ifdef _DEBUG
 	list_for_each(plist, &rtc_alarm_list) {
 		dev = list_entry(plist, struct rtc_alarm_dev, list);
-		printf("%s debug: dev->expect = %d, dev = %08x\n", __func__, dev->expect, dev);
+		logcat("%s debug: dev->expect = %d, dev = %08x\n", __func__, dev->expect, dev);
 	}
 #endif
 
@@ -312,7 +313,7 @@ int rtc_alarm_isActive(struct rtc_alarm_dev *timer)
 	int active = 0;
 
 #ifdef _DEBUG
-	printf("Enter func: %s.\n", __func__);
+	logcat("Enter func: %s.\n", __func__);
 #endif
 
 	list_for_each(plist, &rtc_alarm_list) {
@@ -324,7 +325,7 @@ int rtc_alarm_isActive(struct rtc_alarm_dev *timer)
 	}
 
 #ifdef _DEBUG
-	printf("active = %d\n", active);
+	logcat("active = %d\n", active);
 #endif
 
 	return active;
@@ -336,7 +337,7 @@ int rtc_alarm_del(struct rtc_alarm_dev *timer)
 	struct rtc_alarm_dev *dev;
 
 #ifdef _DEBUG
-	printf("Enter func: %s.\n", __func__);
+	logcat("Enter func: %s.\n", __func__);
 #endif
 
 	list_for_each(plist, &rtc_alarm_list) {

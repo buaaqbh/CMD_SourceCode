@@ -9,6 +9,7 @@
 #include <string.h>
 #include <pthread.h>
 #include "socket_lib.h"
+#include "logcat.h"
 
 static thrFunc sever_thr;
 
@@ -17,11 +18,11 @@ int add_new_tcp_process_thr( ServerEnv *envp )
     pthread_t tcpThr;
 
     if(pthread_create( &tcpThr, NULL, sever_thr, envp)) {
-        printf("tcp thread create fail!\n");
+        logcat("tcp thread create fail!\n");
         return -1;
     }
 
-    printf("tcp thread has been created!\n");
+    logcat("tcp thread has been created!\n");
 
     return 0;
 }
@@ -46,30 +47,30 @@ int start_server(int localport, thrFunc func)
 
     result = bind(serverSocket,(struct sockaddr *)&server_addr,sizeof(server_addr));
     if( result != 0 ) {
-	       printf("[tcp server] bind error!\n ");    
+	       logcat("[tcp server] bind error!\n ");    
     	   return -1;
     }
 
 	// begin to listen
 	result = listen(serverSocket, 5);
 	if( result != 0 ) {
-		printf("[tcp server] listen error!\n ");
+		logcat("[tcp server] listen error!\n ");
 		return -1;
 	}
 
     sever_thr = func;
 	while(1) {
-//		printf("Begin to accept client.\n");
+//		logcat("Begin to accept client.\n");
 		client_len = sizeof(client_addr);
 		clientSocket = accept(serverSocket, (struct sockaddr *)&client_addr, (socklen_t *)&client_len);
 
 		if( clientSocket < 0 ) {
-			printf("[tcp server] accept error!\n" );
+			logcat("[tcp server] accept error!\n" );
 			return -1;
 		}
 		env.m_hSocket = clientSocket;
 
-		printf("socke fd = %d\n", clientSocket);
+		logcat("socke fd = %d\n", clientSocket);
 //		add new tcp server thread
 		add_new_tcp_process_thr(&env);
 	}
@@ -110,18 +111,18 @@ int connect_server(char *destIp, int destPort, int udp, int timeout)
     // connect tcp server
 	result = connect(s_socket, (struct sockaddr *)&address, sizeof(address));
 	if( result == -1 ) {
-//		printf("[tcp client] can't connect server !\n");
+//		logcat("[tcp client] can't connect server !\n");
 		return -1;
 	}
 	
-	printf("############ Connect to server: %s:%d, socket = %d #############\n", destIp, destPort, s_socket);
+	logcat("############ Connect to server: %s:%d, socket = %d #############\n", destIp, destPort, s_socket);
 
 	return s_socket;
 }
 
 int close_socket(int socket_fd)
 {
-    printf("close connect with server !\n ");
+    logcat("close connect with server !\n ");
 
     close(socket_fd);
 
@@ -147,36 +148,36 @@ int socket_send(int sockfd, unsigned char *buf, int len, int timeout)
     int s_buf_size = 64 * 1024;
 //	unsigned int m = sizeof(s_buf_size);
 	if (setsockopt(sockfd, SOL_SOCKET, SO_SNDBUF, (char *)&s_buf_size, sizeof(int)) < 0) {
-		printf("setsockopt fail to change SNDbuf.\n");
+		logcat("setsockopt fail to change SNDbuf.\n");
 		return -1;
 	}
 //	getsockopt(sockfd, SOL_SOCKET, SO_SNDBUF, (void *)&s_buf_size, &m);
-//	printf("Socket Send Buffer size = %d \n", s_buf_size);
+//	logcat("Socket Send Buffer size = %d \n", s_buf_size);
 
 	while (1)
 	{
 		sendBytes = send(sockfd, p_buf, total_len, MSG_NOSIGNAL);
-//		printf("Finsh Send Message, ret = %d, errno = %d\n", sendBytes, errno);
+//		logcat("Finsh Send Message, ret = %d, errno = %d\n", sendBytes, errno);
 		if( sendBytes < 0 && errno != EINTR)
 		{
 			if ((errno == EWOULDBLOCK) || (errno == EAGAIN))
-				printf("Send timeout.\n");
+				logcat("Send timeout.\n");
 			else
-				printf("Send errors!\n");
+				logcat("Send errors!\n");
 	        return -1;
 		}
 		else if(sendBytes == 0) {
-			printf("Send: disconnected.\n");
+			logcat("Send: disconnected.\n");
 			return 0;
 		}
 		else if (sendBytes > 0) 
 		{
 			if (sendBytes >= total_len)
 			{
-//				printf("Send Message OK!\n");
+//				logcat("Send Message OK!\n");
 				break;
 			}
-//			printf("Send Message partially, sendBytes = %d \n", sendBytes);
+//			logcat("Send Message partially, sendBytes = %d \n", sendBytes);
 			p_buf += sendBytes;
 			total_len -= sendBytes;
 			continue;
@@ -211,19 +212,19 @@ int socket_recv(int sockfd, unsigned char *buf, int len, int timeout)
 
 	while(1) {
 		recvBytes = recv(sockfd, p_buf, total_len, 0);
-//		printf("recv return: %d, requred len = %d, errno = %d\n", recvBytes, len, errno);
+//		logcat("recv return: %d, requred len = %d, errno = %d\n", recvBytes, len, errno);
 		if( recvBytes < 0 && errno != EINTR) {
 			if ((errno == EWOULDBLOCK) || (errno == EAGAIN)) {
-//				printf("Receive timeout.\n");
+//				logcat("Receive timeout.\n");
 			}
 			else {
-				printf("Receive: error occur!\n");
+				logcat("Receive: error occur!\n");
 				return -2;
 			}
 			break;
 		}
 		else if(recvBytes == 0) {
-			printf("Receive: disconnected.\n");
+			logcat("Receive: disconnected.\n");
 			return -2;
 		}
 		else if( recvBytes > 0 )
@@ -302,13 +303,13 @@ int socket_recv_udp(int localport, unsigned char *buf, int len, int timeout)
 
     ret = bind(serverSocket, (struct sockaddr *)&server_addr, sizeof(server_addr));
     if( ret != 0 ) {
-	       printf("[tcp server] bind error!\n ");
+	       logcat("[tcp server] bind error!\n ");
     	   return -1;
     }
 
     ret = recvfrom(serverSocket, buf, len, 0, (struct sockaddr *)&server_addr, &sin_len);
     if ((errno == EWOULDBLOCK) || (errno == EAGAIN))
-    	printf("Socket UDP: Receive timeout.\n");
+    	logcat("Socket UDP: Receive timeout.\n");
 
     close(serverSocket);
 

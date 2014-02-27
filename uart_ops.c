@@ -1,21 +1,23 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/types.h>  
 #include <sys/stat.h>   
 #include <fcntl.h>
 #include <termios.h>
 #include <errno.h>
+#include "types.h"
 
 int uart_open_dev(char *dev)
 {
 	int fd = open(dev, O_RDWR);  //| O_NOCTTY | O_NDELAY
 	if (-1 == fd) { 			
-		perror("Can't Open Serial Port");
+		logcat("serial port open error: %s", strerror(errno));
 		return -1;		
 	}
 	else {
-		printf("Serial: Open %s Sucessful.\n", dev);
+		logcat("Serial: Open %s Sucessful.\n", dev);
 		return fd;
 	}
 }
@@ -34,7 +36,7 @@ void uart_set_speed(int fd, int speed)
 	int   status; 
 	struct termios   Opt;
 
-	printf("Set bitrate to %d\n", speed);
+	logcat("Set bitrate to %d\n", speed);
 
 	tcgetattr(fd, &Opt); 
 
@@ -46,7 +48,7 @@ void uart_set_speed(int fd, int speed)
 			Opt.c_cflag |= (CLOCAL | CREAD);
 			status = tcsetattr(fd, TCSANOW, &Opt);  
 			if  (status != 0) {        
-				perror("tcsetattr fd1");  
+				logcat("tcsetattr: %s", strerror(errno));
 				return;
 			}    
 			tcflush(fd,TCIOFLUSH);   
@@ -59,7 +61,7 @@ int uart_set_parity(int fd,int databits,int stopbits,int parity)
 {
 	struct termios options; 
 	if (tcgetattr(fd, &options)  !=  0) {
-		perror("SetupSerial 1");
+		logcat("SetupSerial 1: %s", strerror(errno));
 		return -1;  
 	}
 
@@ -73,7 +75,7 @@ int uart_set_parity(int fd,int databits,int stopbits,int parity)
 		options.c_cflag |= CS8;
 		break;   
 	default:    
-		fprintf(stderr,"Unsupported data size\n"); 
+		logcat("Unsupported data size\n"); 
 		return -1;
 	}
 
@@ -100,7 +102,7 @@ int uart_set_parity(int fd,int databits,int stopbits,int parity)
 		options.c_cflag &= ~CSTOPB;
 		break;
 	default:   
-		fprintf(stderr,"Unsupported parity\n");    
+		logcat("Unsupported parity\n");    
 		return -1;
 	}
   
@@ -113,7 +115,7 @@ int uart_set_parity(int fd,int databits,int stopbits,int parity)
 		options.c_cflag |= CSTOPB;  
 	   break;
 	default:    
-		 fprintf(stderr,"Unsupported stop bits\n");  
+		 logcat("Unsupported stop bits\n");  
 		 return -1;
 	}
 
@@ -127,7 +129,7 @@ int uart_set_parity(int fd,int databits,int stopbits,int parity)
 	options.c_cc[VTIME] = 150; /* 设置超时15 seconds*/   
 	options.c_cc[VMIN] = 0; /* Update the options and do it NOW */
 	if (tcsetattr(fd,TCSANOW,&options) != 0) { 
-		perror("SetupSerial 3");
+		logcat("SetupSerial 3: %s", strerror(errno));
 		return -1;  
 	} 
 	

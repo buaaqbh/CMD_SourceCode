@@ -41,7 +41,7 @@ int Device_Env_init(void)
 
 	ini = iniparser_load(config_file);
 	if (ini==NULL) {
-		fprintf(stderr, "cannot parse file: %s\n", config_file);
+		logcat("cannot parse file: %s\n", config_file);
 		return -1 ;
 	}
 
@@ -92,28 +92,28 @@ int mysystem(char *input, char *output, int maxlen)
 	if( NULL==input || NULL==output )
 		return -1;
 
-	printf("Exec shell command: %s\n", input);
+	logcat("Exec shell command: %s\n", input);
 	memset(output, 0, maxlen);
 	stream = popen(input, "r");
 	reslen = fread(output, sizeof(char), maxlen, stream);
 	status = pclose(stream);
 	if (-1 == status) {
-		printf("pclose error!");
+		logcat("pclose error!");
 		return -1;
 	}
 	else {
-		printf("exit status value = [0x%x]\n", status);
+		logcat("exit status value = [0x%x]\n", status);
 		if (WIFEXITED(status)) {
 			if (0 == WEXITSTATUS(status)) {
-				printf("run shell script successfully.\n");
+				logcat("run shell script successfully.\n");
 			}
 			else {
-				printf("run shell script fail, script exit code: [%d]\n", WEXITSTATUS(status));
+				logcat("run shell script fail, script exit code: [%d]\n", WEXITSTATUS(status));
 				return -1;
 			}
 		}
 		else {
-			printf("exit status = [%d]\n", WEXITSTATUS(status));
+			logcat("exit status = [%d]\n", WEXITSTATUS(status));
 			return -1;
 		}
 	}
@@ -148,10 +148,10 @@ static int create_wpa_conf(void)
 	char *ssid, *proto, *key_mgmt, *psk;
 	
 	ini = iniparser_load(config_file);
-    if (ini==NULL) {
-        fprintf(stderr, "cannot parse file: %s\n", config_file);
-        return -1 ;
-    }
+	if (ini==NULL) {
+		logcat("cannot parse file: %s\n", config_file);
+		return -1 ;
+	}
     
 	ssid = iniparser_getstring(ini, "WIFI:ssid", NULL);
 	proto = iniparser_getstring(ini, "WIFI:proto", NULL);
@@ -159,28 +159,27 @@ static int create_wpa_conf(void)
 	psk = iniparser_getstring(ini, "WIFI:psk", NULL);
 	
 	if ((ssid == NULL) || (proto == NULL) || (key_mgmt == NULL) || (psk == NULL)) {
-		printf("Device Init error, wifi configuration error.\n");
+		logcat("Device Init error, wifi configuration error.\n");
 		return -1;
 	}
 
-    wpa_conf = fopen("wpa_supplicant.conf", "w");
-    fprintf(wpa_conf,
-    "ctrl_interface=/var/run/wpa_supplicant\n"
-    "update_config=1\n"
-    "\n"
-    "network={\n"
-    "ssid=\"%s\"\n"
-    "proto=%s\n"
-    "key_mgmt=%s\n"
-    "psk=\"%s\"\n"
-    "}"
-    "\n", ssid, proto, key_mgmt, psk);
+	wpa_conf = fopen("wpa_supplicant.conf", "w");
+	fprintf(wpa_conf,
+		"ctrl_interface=/var/run/wpa_supplicant\n"
+		"update_config=1\n"
+		"\n"
+		"network={\n"
+		"ssid=\"%s\"\n"
+		"proto=%s\n"
+		"key_mgmt=%s\n"
+		"psk=\"%s\"\n"
+		"}"
+		"\n", ssid, proto, key_mgmt, psk);
     
-    fclose(wpa_conf);
-        
-    iniparser_freedict(ini);
+	fclose(wpa_conf);
+	iniparser_freedict(ini);
     
-    return 0;
+	return 0;
 }
 
 int Device_wifi_init(void)
@@ -198,20 +197,20 @@ int Device_wifi_init(void)
 	memset(cmd_shell, 0, SHELL_MAX_BUF_LEN);
 	sprintf(cmd_shell, "%s%s", cmd_insmod, WLAN_MODULE);
 	if (mysystem(cmd_shell, result, MAX_SHELL_OUTPU_LEN) < 0) {
-		printf("Insmod wifi module error!\n");
+		logcat("Insmod wifi module error!\n");
 		return -1;
 	}
 	
 	memset(cmd_shell, 0, SHELL_MAX_BUF_LEN);
 	sprintf(cmd_shell, "%s%s", cmd_wpa, WLAN_DEVICE);
 	if (mysystem(cmd_shell, result, MAX_SHELL_OUTPU_LEN) < 0) {
-		printf("Start wpa_supplicant error!\n");
+		logcat("Start wpa_supplicant error!\n");
 		return -1;
 	}
 	
-	printf("Wifi Module Init OK.\n");
+	logcat("Wifi Module Init OK.\n");
     
-    return 0;
+	return 0;
 }
 
 void *W3G_Start_func(void *data)
@@ -220,25 +219,25 @@ void *W3G_Start_func(void *data)
 
 	pthread_detach(pthread_self());
 
-	fprintf(stdout, "CMD: Start 3G Module.\n");
+	logcat("CMD: Start 3G Module.\n");
 
 //	system(cmd_shell);
 
-	fprintf(stdout, "CMD: Exit 3G Module.\n");
+	logcat("CMD: Exit 3G Module.\n");
 
 	return 0;
 }
 
 int Device_W3G_init(void)
 {
-    pthread_t p;
+	pthread_t p;
 
-    if(pthread_create( &p, NULL, W3G_Start_func, NULL)) {
-        printf("W3G_Start_func start error!\n");
-        return -1;
-    }
+	if(pthread_create( &p, NULL, W3G_Start_func, NULL)) {
+		logcat("W3G_Start_func start error!\n");
+		return -1;
+	}
 
-    return 0;
+	return 0;
 }
 
 int Device_eth_init(void)
@@ -250,10 +249,10 @@ int Device_eth_init(void)
 	char *addr, *broadcast, *netmask, *dns;
 	
 	ini = iniparser_load(config_file);
-    if (ini==NULL) {
-        fprintf(stderr, "cannot parse file: %s\n", config_file);
-        return -1 ;
-    }
+	if (ini==NULL) {
+		logcat("cannot parse file: %s\n", config_file);
+		return -1 ;
+	}
     
 	addr = iniparser_getstring(ini, "ETH:address", NULL);
 	broadcast = iniparser_getstring(ini, "ETH:broadcast", NULL);
@@ -261,7 +260,7 @@ int Device_eth_init(void)
 	dns = iniparser_getstring(ini, "ETH:dns", NULL);
 	
 	if ((addr == NULL) || (broadcast == NULL) || (dns == NULL) || (netmask == NULL)) {
-		printf("Device Init error, eth configuration error.\n");
+		logcat("Device Init error, eth configuration error.\n");
 		return -1;
 	}
 	
@@ -270,7 +269,7 @@ int Device_eth_init(void)
 	
 	
 	if (mysystem(cmd_shell, result, MAX_SHELL_OUTPU_LEN) < 0) {
-		printf("Ethernet module config error!\n");
+		logcat("Ethernet module config error!\n");
 		iniparser_freedict(ini);
 		return -1;
 	}
@@ -278,13 +277,13 @@ int Device_eth_init(void)
 	memset(cmd_shell, 0, SHELL_MAX_BUF_LEN);
 	sprintf(cmd_shell, "%s %s %s", "echo nameserver", dns, "> /etc/resolv.conf");	
 	if (mysystem(cmd_shell, result, MAX_SHELL_OUTPU_LEN) < 0) {
-		printf("Ethernet module config error!\n");
+		logcat("Ethernet module config error!\n");
 		iniparser_freedict(ini);
 		return -1;
 	}
 	
 	iniparser_freedict(ini);
-	printf("Ethernet Module Init OK.\n");
+	logcat("Ethernet Module Init OK.\n");
 	return 0;
 }
 
@@ -296,34 +295,34 @@ int Device_can_init(void)
 	int err;
 	
 	ini = iniparser_load(config_file);
-    if (ini==NULL) {
-        fprintf(stderr, "cannot parse file: %s\n", config_file);
-        return -1 ;
-    }
+	if (ini==NULL) {
+		logcat("cannot parse file: %s\n", config_file);
+		return -1 ;
+	}
     
-    devname = iniparser_getstring(ini, "CAN:devname", NULL);
-    bitrate = iniparser_getint(ini, "CAN:bitrate", 0);
-    if ((devname == NULL) || (bitrate == 0)) {
-		printf("Device Init error, CAN interface configuration error.\n");
+	devname = iniparser_getstring(ini, "CAN:devname", NULL);
+	bitrate = iniparser_getint(ini, "CAN:bitrate", 0);
+	if ((devname == NULL) || (bitrate == 0)) {
+		logcat("Device Init error, CAN interface configuration error.\n");
 		return -1;
 	}
     
-    printf("CAN: set %s bitrate %d .\n", devname, bitrate);
-    err = can_set_bitrate(devname, bitrate);
+	logcat("CAN: set %s bitrate %d .\n", devname, bitrate);
+	err = can_set_bitrate(devname, bitrate);
 	if (err < 0) {
-		fprintf(stderr, "failed to set bitrate of %s to %u\n",
+		logcat("failed to set bitrate of %s to %u\n",
 			devname, bitrate);
 		return -1;
 	}
 	
-	printf("CAN: start %s .\n", devname);
+	logcat("CAN: start %s .\n", devname);
 	if (can_do_start(devname) < 0) {
-		fprintf(stderr, "%s: failed to start\n", devname);
+		logcat("%s: failed to start\n", devname);
 		return -1;
 	}
     
-    iniparser_freedict(ini);
-	printf("CAN configration OK.\n");
+	iniparser_freedict(ini);
+	logcat("CAN configration OK.\n");
 	return 0;
 }
 
@@ -335,7 +334,7 @@ int code_convert(char *from_charset, char *to_charset, char *inbuf, int inlen, c
 
 	cd = iconv_open(to_charset, from_charset);
 	if (cd == 0) {
-		printf("Open error.\n");
+		logcat("Open error.\n");
 		return -1;
 	}
 	memset(outbuf, 0, outlen);
@@ -355,51 +354,51 @@ int Device_get_basic_info(status_basic_info_t *dev)
 
 	ini = iniparser_load(config_file);
 	if (ini==NULL) {
-		fprintf(stderr, "cannot parse file: %s\n", config_file);
+		logcat("cannot parse file: %s\n", config_file);
 		return -1 ;
 	}
 
-    str = iniparser_getstring(ini, "device:name", NULL);
-    if (str != NULL) {
-//    	memcpy(dev->SmartEquip_Name, str, strlen(str));
-    	code_convert("utf-8", "gb2312", str, strlen(str), (char *)dev->SmartEquip_Name, 50);
-//    	printf("str = %s, gbk = %s\n", str, dev->SmartEquip_Name);
-    }
+	str = iniparser_getstring(ini, "device:name", NULL);
+	if (str != NULL) {
+//		memcpy(dev->SmartEquip_Name, str, strlen(str));
+		code_convert("utf-8", "gb2312", str, strlen(str), (char *)dev->SmartEquip_Name, 50);
+//		logcat("str = %s, gbk = %s\n", str, dev->SmartEquip_Name);
+	}
 
-    str = iniparser_getstring(ini, "device:model", NULL);
-    if (str != NULL) {
-//    	memcpy(dev->Model, str, strlen(str));
-    	code_convert("utf-8", "gb2312", str, strlen(str), (char *)dev->Model, 10);
-    }
+	str = iniparser_getstring(ini, "device:model", NULL);
+	if (str != NULL) {
+//		memcpy(dev->Model, str, strlen(str));
+		code_convert("utf-8", "gb2312", str, strlen(str), (char *)dev->Model, 10);
+	}
 
-    str = iniparser_getstring(ini, "device:version", NULL);
-    if (str != NULL) {
-//    	memcpy(dev->Essential_Info_Version, str, strlen(str));
-    	code_convert("utf-8", "gb2312", str, strlen(str), (char *)dev->Essential_Info_Version, 4);
-    }
+	str = iniparser_getstring(ini, "device:version", NULL);
+	if (str != NULL) {
+//		memcpy(dev->Essential_Info_Version, str, strlen(str));
+		code_convert("utf-8", "gb2312", str, strlen(str), (char *)dev->Essential_Info_Version, 4);
+	}
 
-    str = iniparser_getstring(ini, "device:manufacturer", NULL);
-    if (str != NULL) {
-//    	memcpy(dev->Bs_Manufacturer, str, strlen(str));
-    	code_convert("utf-8", "gb2312", str, strlen(str), (char *)dev->Bs_Manufacturer, 50);
-    }
+	str = iniparser_getstring(ini, "device:manufacturer", NULL);
+	if (str != NULL) {
+//		memcpy(dev->Bs_Manufacturer, str, strlen(str));
+		code_convert("utf-8", "gb2312", str, strlen(str), (char *)dev->Bs_Manufacturer, 50);
+	}
 
-    str = iniparser_getstring(ini, "device:bsid", NULL);
-    if (str != NULL) {
-//    	memcpy(dev->Bs_Identifier, str, strlen(str));
-//    	printf("BS_id: %s\n", dev->Bs_Identifier);
-    	code_convert("utf-8", "gb2312", str, strlen(str), (char *)dev->Bs_Identifier, 20);
-    }
+	str = iniparser_getstring(ini, "device:bsid", NULL);
+	if (str != NULL) {
+//		memcpy(dev->Bs_Identifier, str, strlen(str));
+//		logcat("BS_id: %s\n", dev->Bs_Identifier);
+		code_convert("utf-8", "gb2312", str, strlen(str), (char *)dev->Bs_Identifier, 20);
+	}
 
-    str = iniparser_getstring(ini, "device:date", NULL);
-    if (str != NULL) {
-    	memset(&tm, 0, sizeof(struct tm));
-    	tm.tm_year = (str[0]-'0')*1000 + (str[1]-'0')*100 + (str[2]-'0')*10 + (str[3]-'0') - 1900;
-    	tm.tm_mon = (str[4]-'0')*10 + (str[5]-'0') - 1;
-    	tm.tm_mday = (str[6]-'0')*10 + (str[7]-'0');
-    	dev->Bs_Production_Date = mktime(&tm);
-//    	printf("Date: %s, 0x%x\n", ctime(&dev->Bs_Production_Date), dev->Bs_Production_Date);
-    }
+	str = iniparser_getstring(ini, "device:date", NULL);
+	if (str != NULL) {
+		memset(&tm, 0, sizeof(struct tm));
+		tm.tm_year = (str[0]-'0')*1000 + (str[1]-'0')*100 + (str[2]-'0')*10 + (str[3]-'0') - 1900;
+		tm.tm_mon = (str[4]-'0')*10 + (str[5]-'0') - 1;
+		tm.tm_mday = (str[6]-'0')*10 + (str[7]-'0');
+		dev->Bs_Production_Date = mktime(&tm);
+//		logcat("Date: %s, 0x%x\n", ctime(&dev->Bs_Production_Date), dev->Bs_Production_Date);
+	}
 
 	iniparser_freedict(ini);
 
@@ -419,17 +418,17 @@ static int Device_get_voltage(void)
 
 	fd = open(BATTERY_DEVICE, O_RDONLY);
 	if (fd < 0) {
-		fprintf(stderr, "Open Battery device error.\n");
+		logcat("Open Battery device error.\n");
 		return -1;
 	}
 
-    if ((len = read(fd, battery, sizeof(battery))) <= 0) {
-        fprintf(stderr, "Read battery fail: %s\n", strerror(errno));
-        close(fd);
-        return -1;
-    }
+	if ((len = read(fd, battery, sizeof(battery))) <= 0) {
+		logcat("Read battery fail: %s\n", strerror(errno));
+		close(fd);
+		return -1;
+	}
 
-    power = strtol(battery, NULL, 10);
+	power = strtol(battery, NULL, 10);
 
 	close(fd);
 
@@ -443,7 +442,7 @@ int Device_get_working_status(status_working_t *status)
 	float capacity = 0.0;
 
 	clock_gettime(CLOCK_MONOTONIC, &t);
-//	printf("tv_sec=%llu, tv_nsec=%llu\n", (unsigned long long)t.tv_sec, (unsigned long long)t.tv_nsec);
+//	logcat("tv_sec=%llu, tv_nsec=%llu\n", (unsigned long long)t.tv_sec, (unsigned long long)t.tv_nsec);
 
 	status->Time_Stamp = (int)time((time_t*)NULL);
 	status->Working_Time = (float)t.tv_sec / 3600;
@@ -462,133 +461,133 @@ int Device_get_working_status(status_working_t *status)
 
 static void get_gateway(const char *net_dev, unsigned long *p)
 {
-    FILE *fp;
-    char buf[1024];
-    char iface[16];
-    unsigned int dest_addr=0, gate_addr=0;
+	FILE *fp;
+	char buf[1024];
+	char iface[16];
+	unsigned int dest_addr=0, gate_addr=0;
 
-    fp = fopen("/proc/net/route", "r");
-    if(fp == NULL) {
-        printf("fopen error \n");
-        return;
-    }
+	fp = fopen("/proc/net/route", "r");
+	if(fp == NULL) {
+		logcat("fopen error \n");
+		return;
+	}
 
-    fgets(buf, sizeof(buf), fp);
+	fgets(buf, sizeof(buf), fp);
 
-    while(fgets(buf, sizeof(buf), fp)) {
-        if((sscanf(buf, "%s\t%X\t%X", iface, &dest_addr, &gate_addr) == 3)
-            && (memcmp(net_dev, iface, strlen(net_dev)) == 0)
-            && gate_addr != 0)
-        {
-//				printf("iface: %s, gate_addr = 0x%08x\n", iface, gate_addr);
-				*p = gate_addr;
-                break;
-        }
-    }
+	while(fgets(buf, sizeof(buf), fp)) {
+		if((sscanf(buf, "%s\t%X\t%X", iface, &dest_addr, &gate_addr) == 3)
+				&& (memcmp(net_dev, iface, strlen(net_dev)) == 0)
+				&& gate_addr != 0)
+		{
+//			logcat("iface: %s, gate_addr = 0x%08x\n", iface, gate_addr);
+			*p = gate_addr;
+			break;
+		}
+	}
 
-    fclose(fp);
+	fclose(fp);
 }
 
 static int get_dns(char *dns)
 {
-    int fd = -1;
-    int size = 0;
-    char strBuf[256];
-    char tmpBuf[100];
-    int buf_size = sizeof(strBuf);
-    char *p = NULL;
-    char *q = NULL;
-    int i = 0;
-    int j = 0;
-    int count = 0;
+	int fd = -1;
+	int size = 0;
+	char strBuf[256];
+	char tmpBuf[100];
+	int buf_size = sizeof(strBuf);
+	char *p = NULL;
+	char *q = NULL;
+	int i = 0;
+	int j = 0;
+	int count = 0;
 
-    fd = open("/etc/resolv.conf", O_RDONLY);
-    if(-1 == fd) {
-        printf("%s open error \n", __func__);
-        return -1;
-    }
-    size = read(fd, strBuf, buf_size);
-    if(size < 0) {
-        printf("%s read file len error \n", __func__);
-        close(fd);
-        return -1;
-    }
-    strBuf[buf_size - 1] = '\0';
-    close(fd);
+	fd = open("/etc/resolv.conf", O_RDONLY);
+	if(-1 == fd) {
+		logcat("%s open error \n", __func__);
+		return -1;
+	}
+	size = read(fd, strBuf, buf_size);
+	if(size < 0) {
+		logcat("%s read file len error \n", __func__);
+		close(fd);
+		return -1;
+	}
+	strBuf[buf_size - 1] = '\0';
+	close(fd);
 
-//	printf("strBuf: %s\n", strBuf);
-    while(i < buf_size) {
-        if((p = strstr(&strBuf[i], "nameserver")) != NULL) {
+//	logcat("strBuf: %s\n", strBuf);
+	while(i < buf_size) {
+		if((p = strstr(&strBuf[i], "nameserver")) != NULL) {
 			p += sizeof("nameserver");
-            j++;
-            count = 0;
+			j++;
+			count = 0;
 
-            memset(tmpBuf, 0xff, 100);
-            memcpy(tmpBuf, p, 100);
-            tmpBuf[sizeof(tmpBuf) -1 ] = '\0';
+			memset(tmpBuf, 0xff, 100);
+			memcpy(tmpBuf, p, 100);
+			tmpBuf[sizeof(tmpBuf) -1 ] = '\0';
 
-            q = p;
-            while(*q != '\n') {
-                q++;
-                count++;
-            }
-            i += (sizeof("nameserver") + count);
+			q = p;
+			while(*q != '\n') {
+				q++;
+				count++;
+			}
+			i += (sizeof("nameserver") + count);
 
 			memcpy(dns, p, count);
 			dns[count]='\0';
 			break;
-        }
-        else {
-            i++;
-        }
-    }
+	        }
+		else {
+			i++;
+		}
+	}
 
-    return 0;
+	return 0;
 }
 
 int Device_getNet_info(Ctl_net_adap_t  *adap)
 {
 	/*socket参数设置*/
-    int sock;
-    struct sockaddr_in sin;
-    struct ifreq ifr;
-    unsigned long gateway;
-    char dns[32];
-    char *net_dev = "eth0";
+	int sock;
+	struct sockaddr_in sin;
+	struct ifreq ifr;
+	unsigned long gateway;
+	char dns[32];
+	char *net_dev = "eth0";
 
-    get_gateway(net_dev, &gateway);
-    get_dns(dns);
-    printf("Dns: %s \n", dns);
-    inet_aton(dns, &sin.sin_addr);
+	get_gateway(net_dev, &gateway);
+	get_dns(dns);
+	logcat("Dns: %s \n", dns);
+	inet_aton(dns, &sin.sin_addr);
 
-    adap->Gateway = gateway;
-    adap->DNS_Server = sin.sin_addr.s_addr;
+	adap->Gateway = gateway;
+	adap->DNS_Server = sin.sin_addr.s_addr;
 
-    sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock == -1) {
-        perror("socket");
-        return -1;
-    }
+	sock = socket(AF_INET, SOCK_DGRAM, 0);
+	if (sock == -1) {
+		logcat("socket: %s", strerror(errno));
+		return -1;
+	}
 
-    /*这个是网卡的标识符*/
-    strncpy(ifr.ifr_name, net_dev, IFNAMSIZ);
-    ifr.ifr_name[IFNAMSIZ - 1] = 0;
+	/*这个是网卡的标识符*/
+	strncpy(ifr.ifr_name, net_dev, IFNAMSIZ);
+	ifr.ifr_name[IFNAMSIZ - 1] = 0;
 
-    /*获取ip*/
-    if (ioctl(sock, SIOCGIFADDR, &ifr) < 0) {
-        perror("ioctl");
-        return -1;
-    }
-    memcpy(&sin, &ifr.ifr_addr, sizeof(sin));
+	/*获取ip*/
+	if (ioctl(sock, SIOCGIFADDR, &ifr) < 0) {
+		logcat("ioctl: %s", strerror(errno));
+		return -1;
+	}
+	memcpy(&sin, &ifr.ifr_addr, sizeof(sin));
 //	sprintf(ip,"%s",inet_ntoa(sin.sin_addr));
 	adap->IP = sin.sin_addr.s_addr;
 
-    /*获取子网掩码*/
-    if (ioctl(sock, SIOCGIFNETMASK, &ifr)< 0) {
-        perror("ioctl");
-        return -1;
-    }
-    memcpy(&sin, &ifr.ifr_addr, sizeof(sin));
+	/*获取子网掩码*/
+	if (ioctl(sock, SIOCGIFNETMASK, &ifr)< 0) {
+		logcat("ioctl: %s", strerror(errno));
+		return -1;
+	}
+	memcpy(&sin, &ifr.ifr_addr, sizeof(sin));
 //	sprintf(zwym,"%s\n",inet_ntoa(sin.sin_addr));
 	adap->Subnet_mask = sin.sin_addr.s_addr;
 
@@ -634,7 +633,7 @@ int Device_setId(byte *cmd_id, byte *c_id, usint org_id)
 
 	ini = iniparser_load(config_file);
 	if (ini==NULL) {
-		fprintf(stderr, "cannot parse file: %s\n", config_file);
+		logcat("cannot parse file: %s\n", config_file);
 			return -1 ;
 	}
 
@@ -682,11 +681,11 @@ int Device_setServerInfo(Ctl_up_device_t  *up_device)
 		return -1;
 
 	addr.s_addr = up_device->IP_Address;
-	printf("Set: ip = %s, port = %d, domain = %s\n", inet_ntoa(addr), up_device->Port, up_device->Domain_Name);
+	logcat("Set: ip = %s, port = %d, domain = %s\n", inet_ntoa(addr), up_device->Port, up_device->Domain_Name);
 	ini = iniparser_load(config_file);
 	if (ini==NULL) {
-		fprintf(stderr, "cannot parse file: %s\n", config_file);
-			return -1 ;
+		logcat("cannot parse file: %s\n", config_file);
+		return -1 ;
 	}
 
 	memset(buf, 0, 32);
@@ -713,16 +712,16 @@ int Device_setServerInfo(Ctl_up_device_t  *up_device)
 
 int Device_reset(usint type)
 {
-	fprintf(stdout, "Device Reboot, type = %d \n", type);
+	logcat("Device Reboot, type = %d \n", type);
 	system("/sbin/reboot");
 	return 0;
 }
 
 int Device_setWakeup_time(int revival_time, usint revival_cycle, usint duration_time)
 {
-	fprintf(stdout, "revival time = %d, cycle = %ds, druation = %ds\n",
+	logcat("revival time = %d, cycle = %ds, druation = %ds\n",
 			revival_time, revival_cycle, duration_time);
-	fprintf(stdout, "%s\n", ctime((time_t *)&revival_time));
+	logcat("%s\n", ctime((time_t *)&revival_time));
 
 	return 0;
 }
@@ -734,7 +733,7 @@ int Device_getSampling_Cycle(char *entry)
 
 	ini = iniparser_load(config_file);
 	if (ini==NULL) {
-		fprintf(stderr, "cannot parse file: %s\n", config_file);
+		logcat("cannot parse file: %s\n", config_file);
 			return -1 ;
 	}
 
@@ -753,13 +752,13 @@ int Device_setSampling_Cycle(char *entry, int value)
 	FILE    *save;
 
 	if (value <= 0) {
-		fprintf(stderr, "CMD: Invalid cycle value.\n");
+		logcat("CMD: Invalid cycle value.\n");
 		return -1;
 	}
 
 	ini = iniparser_load(config_file);
 	if (ini==NULL) {
-		fprintf(stderr, "cannot parse file: %s\n", config_file);
+		logcat("cannot parse file: %s\n", config_file);
 			return -1 ;
 	}
 
@@ -778,7 +777,7 @@ int Device_setSampling_Cycle(char *entry, int value)
 	iniparser_dump_ini(ini, save);
 	fclose(save);
 
-//	printf("Device func: %d, 0x%08x\n", sample_dev.interval, (unsigned int)&sample_dev);
+//	logcat("Device func: %d, 0x%08x\n", sample_dev.interval, (unsigned int)&sample_dev);
 
 out:
 	iniparser_freedict(ini);
@@ -822,7 +821,7 @@ int Device_SetAlarm_Threshold(byte type, byte *buf, byte num)
 
 	total = File_GetNumberOfRecords(FILE_ALARM_PAR, record_len);
 
-	printf("type = 0x%x, num = %d\n", type, num);
+	logcat("type = 0x%x, num = %d\n", type, num);
 
 	for (j = 0; j < num; j++) {
 		p = buf + j * 10;
