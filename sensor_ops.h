@@ -29,6 +29,7 @@ extern "C" {
 #include "types.h"
 
 extern pthread_mutex_t can_mutex;
+extern pthread_mutex_t rs485_mutex;
 
 void Sensor_Scanning(void);
 int Sensor_GetData(byte *buf, int type);
@@ -47,6 +48,8 @@ int Can_Send(byte *buf, int len);
 int Can_Recv(byte *buf);
 int Sensor_Can_ReadData(usint addr, byte *buf);
 int Sensor_Can_Config(usint addr, usint t);
+
+int Sensor_RS485_ReadData(byte addr, byte *buf);
 
 extern int Sensor_Zigbee_ReadData(byte *buf, int len);
 

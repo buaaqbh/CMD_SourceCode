@@ -385,6 +385,7 @@ int main(int argc, char *argv[])
 	}
 
 	pthread_mutex_init(&can_mutex, NULL);
+	pthread_mutex_init(&rs485_mutex, NULL);
 	pthread_mutex_init(&com_mutex, NULL);
 
 	pthread_spin_init(&spinlock, 0);

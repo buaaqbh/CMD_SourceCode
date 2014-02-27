@@ -56,7 +56,7 @@ int Modem_Init(void)
 
 	fd = uart_open_dev(SMS_SERIAL_DEV);
 	if (fd == -1) {
-		logcat("Modem open uart: %s", strerror(errno));
+		logcat("Modem open uart: %s\n", strerror(errno));
 		return -1;
 	}
 
@@ -97,7 +97,7 @@ int Modem_WaitResponse(int fd, char *expect, int retry)
 			if (errno == ETIME)
 				continue;
 			else {
-				logcat("Modem read uart: %s", strerror(errno));
+				logcat("Modem read uart: %s\n", strerror(errno));
 				return -1;
 			}
 		}
@@ -210,7 +210,7 @@ SMS_Retry:
 			if (errno == ETIME)
 				continue;
 			else {
-				logcat("Modem read uart: %s", strerror(errno));
+				logcat("Modem read uart: %s\n", strerror(errno));
 				return -1;
 			}
 		}
@@ -617,7 +617,7 @@ void *SMS_WaitNewMessage(void *arg)
 		memset(rbuf, 0, 512);
 		nread = read(fd, rbuf, 512);
 		if (nread < 0) {
-			logcat("Modem read uart: %s", strerror(errno));
+			logcat("Modem read uart: %s\n", strerror(errno));
 			close(fd);
 			fd = -1;
 			continue;

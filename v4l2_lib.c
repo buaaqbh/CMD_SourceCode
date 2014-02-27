@@ -83,7 +83,7 @@ void v4l2_close_device (int fd)
 {
 	if (-1 == close (fd))
 //	if (-1 == v4l2_close(fd))
-		logcat("V4L2 Close: %s", strerror(errno));
+		logcat("V4L2 Close: %s\n", strerror(errno));
 
 	return;
 }
@@ -104,7 +104,7 @@ static int v4l2_init_mmap (int fd)
 			return -1;
 		}
         	else {
-			logcat("V4L2 VIDIOC_REQBUFS: %s", strerror(errno));
+			logcat("V4L2 VIDIOC_REQBUFS: %s\n", strerror(errno));
 			return -1;
 		}
 	}
@@ -130,7 +130,7 @@ static int v4l2_init_mmap (int fd)
 		buf.index = n_buffers;
 
 		if (-1 == xioctl (fd, VIDIOC_QUERYBUF, &buf)) {
-			logcat("V4L2 VIDIOC_QUERYBUF: %s", strerror(errno));
+			logcat("V4L2 VIDIOC_QUERYBUF: %s\n", strerror(errno));
 			return -1;
 		}
 
@@ -143,7 +143,7 @@ static int v4l2_init_mmap (int fd)
 						fd, buf.m.offset);
 
 		if (MAP_FAILED == buffers[n_buffers].start) {
-			logcat("V4L2 mmap: %s", strerror(errno));
+			logcat("V4L2 mmap: %s\n", strerror(errno));
 			return -1;
 		}
 	}
@@ -169,7 +169,7 @@ int v4l2_init_device (int fd, struct v4l2_pix_format pix, int lu, int co, int sa
 			logcat ("VIDIOC_QUERYCAP: Video Device is no V4L2 device\n");
 		}
 		else {
-			logcat("V4L2 VIDIOC_QUERYCAP: %s", strerror(errno));
+			logcat("V4L2 VIDIOC_QUERYCAP: %s\n", strerror(errno));
 		}
 		return -1;
 	}
@@ -285,7 +285,7 @@ int v4l2_init_device (int fd, struct v4l2_pix_format pix, int lu, int co, int sa
 	else
 		ctl_set.value = 128;
 	if (-1 == ioctl(fd, VIDIOC_S_CTRL, &ctl_set)) {
-		logcat("V4L2 VIDIOC_QUERYCAP: %s", strerror(errno));
+		logcat("V4L2 VIDIOC_QUERYCAP: %s\n", strerror(errno));
 	}
 
 	ctl_set.id = V4L2_CID_CONTRAST;
@@ -294,7 +294,7 @@ int v4l2_init_device (int fd, struct v4l2_pix_format pix, int lu, int co, int sa
 	else
 		ctl_set.value = 128;
 	if (-1 == ioctl(fd, VIDIOC_S_CTRL, &ctl_set)) {
-		logcat("V4L2 VIDIOC_QUERYCAP: %s", strerror(errno));
+		logcat("V4L2 VIDIOC_QUERYCAP: %s\n", strerror(errno));
 	}
 
 	ctl_set.id = V4L2_CID_SATURATION;
@@ -303,7 +303,7 @@ int v4l2_init_device (int fd, struct v4l2_pix_format pix, int lu, int co, int sa
 	else
 		ctl_set.value = 128;
 	if (-1 == ioctl(fd, VIDIOC_S_CTRL, &ctl_set)) {
-		logcat("V4L2 VIDIOC_QUERYCAP: %s", strerror(errno));
+		logcat("V4L2 VIDIOC_QUERYCAP: %s\n", strerror(errno));
 	}
 
 	if (v4l2_init_mmap(fd) < 0) {
@@ -319,7 +319,7 @@ void v4l2_uninit_device (void)
 
 	for (i = 0; i < n_buffers; ++i)
 		if (-1 == munmap (buffers[i].start, buffers[i].length)) {
-			logcat("V4L2 munmap: %s", strerror(errno));
+			logcat("V4L2 munmap: %s\n", strerror(errno));
 		}
 
 	free (buffers);
@@ -340,14 +340,14 @@ int v4l2_start_capturing (int fd)
 		buf.index = i;
 
 		if (-1 == xioctl (fd, VIDIOC_QBUF, &buf)) {
-			logcat("V4L2 VIDIOC_QBUF: %s", strerror(errno));
+			logcat("V4L2 VIDIOC_QBUF: %s\n", strerror(errno));
 			return -1;
 		}
 	}
 
 	type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	if (-1 == xioctl (fd, VIDIOC_STREAMON, &type)) {
-		logcat("V4L2 VIDIOC_STREAMON: %s", strerror(errno));
+		logcat("V4L2 VIDIOC_STREAMON: %s\n", strerror(errno));
 		return -1;
 	}
 	
@@ -360,7 +360,7 @@ int v4l2_stop_capturing (int fd)
 
 	type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	if (-1 == xioctl (fd, VIDIOC_STREAMOFF, &type)) {
-		logcat("V4L2 VIDIOC_STREAMOFF: %s", strerror(errno));
+		logcat("V4L2 VIDIOC_STREAMOFF: %s\n", strerror(errno));
 		return -1;
 	}
 	
@@ -421,7 +421,7 @@ static void jpegWrite(unsigned char* img, int width, int height, char *jpegFilen
 
 	// try to open file for saving
 	if (!outfile) {
-		logcat("V4L2 jpeg: %s", strerror(errno));
+		logcat("V4L2 jpeg: %s\n", strerror(errno));
 		return;
   }
 
@@ -496,7 +496,7 @@ int v4l2_read_frame (int fd, int width, int height, char *jpegFilename)
 		/* Could ignore EIO, see spec. */
 		/* fall through */
 		default:
-			logcat("V4L2 VIDIOC_DQBUF: %s", strerror(errno));
+			logcat("V4L2 VIDIOC_DQBUF: %s\n", strerror(errno));
 			return -1;
 		}
 	}
@@ -504,7 +504,7 @@ int v4l2_read_frame (int fd, int width, int height, char *jpegFilename)
 	process_image (buffers[buf.index].start, width, height, jpegFilename);
 
 	if (-1 == xioctl (fd, VIDIOC_QBUF, &buf)) {
-		logcat("V4L2 VIDIOC_QBUF: %s", strerror(errno));
+		logcat("V4L2 VIDIOC_QBUF: %s\n", strerror(errno));
 		return -1;
 	}
 
@@ -549,7 +549,7 @@ int v4l2_capture_image (char *jpegFilename, int width, int height, int lu, int c
 			if (-1 == ret) {
 				if (EINTR == errno)
 					continue;
-				logcat("V4L2 select: %s", strerror(errno));
+				logcat("V4L2 select: %s\n", strerror(errno));
 				break;
 			}
 			if (0 == ret) {

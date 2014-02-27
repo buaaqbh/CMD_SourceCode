@@ -16,8 +16,6 @@
 
 /* PELCO-D Protocol */
 
-#define  UART_PORT_RS485	"/dev/ttymxc3"
-#define  UART_RS485_SPEDD 	9600
 #define  ACTION_INTERVAL	(800*1000)
 
 //#define _DEBUG
@@ -58,7 +56,7 @@ int Camera_SendCmd(byte *cmd, int len)
 
 	fd = uart_open_dev(UART_PORT_RS485);
 	if (fd == -1) {
-		logcat("serial port open error: %s", strerror(errno));
+		logcat("serial port open error: %s\n", strerror(errno));
 		return -1;
 	}
 	uart_set_speed(fd, UART_RS485_SPEDD);
@@ -67,6 +65,7 @@ int Camera_SendCmd(byte *cmd, int len)
 		return -1;
 	}
 
+	system("echo 1 >/sys/devices/platform/gpio-power.0/rs485_direction");
 	cmd[len - 1] = checksum((cmd + 1), 5);
 	err = io_writen(fd, cmd, len);
 	if (err > 0)

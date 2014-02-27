@@ -47,7 +47,7 @@ int Zigbee_Get_Device(int speed)
 
 	fd = uart_open_dev(ZIGBEE_UART_NAME);
 	if (fd == -1) {
-		logcat("serial port open error: %s", strerror(errno));
+		logcat("serial port open error: %s\n", strerror(errno));
 		return -1;
 	}
 
@@ -107,7 +107,7 @@ int Zigbee_Set_PanID(int fd, byte *pan_id)
 
 	if ((err = io_readn(fd, rbuf, 2, 5)) != 2) {
 		if (err < 0) {
-			logcat("read uart: %s", strerror(errno));
+			logcat("read uart: %s\n", strerror(errno));
 		}
 		else {
 			logcat("nread %d bytes\n", err);
@@ -139,7 +139,7 @@ int Zigbee_Read_PanID(int fd, byte *pan_id)
 
 	if ((err = io_readn(fd, pan_id, 2, 5)) != 2) {
 		if (err < 0) {
-			logcat("read uart: %s", strerror(errno));
+			logcat("read uart: %s\n", strerror(errno));
 		}
 		else {
 			logcat("nread %d bytes\n", err);
@@ -165,7 +165,7 @@ int Zigbee_Read_ShortAddr(int fd, byte *short_addr)
 
 	if ((err = io_readn(fd, short_addr, 2, 5)) != 2) {
 		if (err < 0) {
-			logcat("read uart: %s", strerror(errno));
+			logcat("read uart: %s\n", strerror(errno));
 		}
 		else {
 			logcat("nread %d bytes\n", err);
@@ -213,7 +213,7 @@ int Zigbee_Set_Bitrate(int fd, int speed)
 
 	if ((err = io_readn(fd, rbuf, 6, 5)) != 6) {
 		if (err < 0) {
-			logcat("read uart: %s", strerror(errno));
+			logcat("read uart: %s\n", strerror(errno));
 		}
 		else {
 			logcat("nread %d bytes\n", err);
@@ -246,7 +246,7 @@ int Zigbee_Read_MAC(int fd, byte *mac)
 
 	if ((err = io_readn(fd, mac, 8, 5)) != 8) {
 		if (err < 0) {
-			logcat("read uart: %s", strerror(errno));
+			logcat("read uart: %s\n", strerror(errno));
 		}
 		else {
 			logcat("nread %d bytes\n", err);
@@ -288,7 +288,7 @@ int Zigbee_Set_type(int fd, int type)
 
 	if ((err = io_readn(fd, rbuf, 8, 10)) != 8) {
 		if (err < 0) {
-			logcat("read uart: %s", strerror(errno));
+			logcat("read uart: %s\n", strerror(errno));
 		}
 		else {
 			logcat("nread %d bytes\n", err);
@@ -320,7 +320,7 @@ int Zigbee_Get_type(int fd)
 
 	if ((err = io_readn(fd, rbuf, 6, 5)) != 6) {
 		if (err < 0) {
-			logcat("read uart: %s", strerror(errno));
+			logcat("read uart: %s\n", strerror(errno));
 		}
 		else {
 			logcat("nread %d bytes\n", err);
@@ -358,7 +358,7 @@ int Zigbee_Set_Channel(int fd, int channel)
 
 	if ((err = io_readn(fd, rbuf, 5, 5)) != 5) {
 		if (err < 0) {
-			logcat("read uart: %s", strerror(errno));
+			logcat("read uart: %s\n", strerror(errno));
 		}
 		else {
 			logcat("nread %d bytes\n", err);
@@ -389,7 +389,7 @@ int Zigbee_Get_channel(int fd)
 
 	if ((err = io_readn(fd, rbuf, 6, 5)) != 6) {
 		if (err < 0) {
-			logcat("read uart: %s", strerror(errno));
+			logcat("read uart: %s\n", strerror(errno));
 		}
 		else {
 			logcat("nread %d bytes\n", err);
@@ -422,7 +422,7 @@ int Zigbee_Set_TransType(int fd, int type)
 
 	if ((err = io_readn(fd, rbuf, 6, 5)) != 6) {
 		if (err < 0) {
-			logcat("read uart: %s", strerror(errno));
+			logcat("read uart: %s\n", strerror(errno));
 		}
 		else {
 			logcat("nread %d bytes\n", err);
@@ -472,7 +472,7 @@ int Zigbee_Set_RouterAddr(int fd, usint addr)
 
 	if ((err = io_readn(fd, rbuf, 2, 5)) != 2) {
 		if (err < 0) {
-			logcat("read uart: %s", strerror(errno));
+			logcat("read uart: %s\n", strerror(errno));
 		}
 		else {
 			logcat("nread %d bytes\n", err);
@@ -504,7 +504,7 @@ usint Zigbee_Read_RouterAddr(int fd)
 
 	if ((err = io_readn(fd, rbuf, 2, 5)) != 2) {
 		if (err < 0) {
-			logcat("read uart: %s", strerror(errno));
+			logcat("read uart: %s\n", strerror(errno));
 		}
 		else {
 			logcat("nread %d bytes\n", err);
@@ -535,7 +535,7 @@ usint Zigbee_Test_SerialPort(int fd)
 	memset(rbuf, 0, 8);
 	if ((err = io_readn(fd, rbuf, 8, 5)) != 8) {
 		if (err < 0) {
-			logcat("read uart: %s", strerror(errno));
+			logcat("read uart: %s\n", strerror(errno));
 		}
 		else {
 			logcat("nread %d bytes\n", err);
@@ -641,7 +641,7 @@ int Sensor_Zigbee_ReadData(byte *buf, int len)
 	memset(rbuf, 0, 256);
 	if ((err = io_readn(fd, rbuf, len, timeout)) != len) {
 		if (err < 0) {
-			logcat("read uart: %s", strerror(errno));
+			logcat("read uart: %s\n", strerror(errno));
 		}
 		else {
 			logcat("nread %d bytes\n", err);

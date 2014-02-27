@@ -17,6 +17,7 @@
 #include <pthread.h>
 #include <errno.h>
 #include "sensor_ops.h"
+#include "uart_ops.h"
 #include "camera_control.h"
 #include "rtc_alarm.h"
 #include "file_ops.h"
@@ -52,6 +53,7 @@ struct can_device {
 };
 
 pthread_mutex_t can_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t rs485_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 enum sensor_type {
 	SENSOR_TEMP = 0,
@@ -276,17 +278,29 @@ static void CMA_GetWind_Data(Data_qixiang_t *data)
 				speed_d[i] = (buf[8] << 8) | buf[9];
 				if (max < speed[i])
 					max = speed[i];
-				logcat("Windy Average Sample: i = %d, state = 0x%x\n", i, buf[18]);
-				logcat("Windy Average Sample: speed = %d, direction = %d\n", speed[i], speed_d[i]);			}
+				logcat("Windy Sample CAN: i = %d, state = 0x%x\n", i, buf[18]);
+				logcat("Windy Sample CAN: speed = %d, direction = %d\n", speed[i], speed_d[i]);
+			}
+
+			if (Sensor_RS485_ReadData(0x05, buf) == 0) {
+				speed[i] = (buf[4] << 8) | buf[5];
+				speed_d[i] = (buf[6] << 8) | buf[7];
+				if (max < speed[i])
+					max = speed[i];
+				logcat("Windy Sample RS485: i = %d, state = 0x%x\n", i, buf[18]);
+				logcat("Windy Sample RS485: speed = %d, direction = %d\n", speed[i], speed_d[i]);
+
+				sensor_status |= (3 << 1);
+			}
 			if (i < 2)
 				sleep(1);
 		}
 
-		data->Average_WindSpeed_10min = (float)(speed[0] + speed[1] + speed[2]) / 3;
+		data->Average_WindSpeed_10min = (float)(speed[0] + speed[1] + speed[2]) / 30.0;
 		data->Average_WindDirection_10min = speed_d[2];
-		data->Max_WindSpeed = max;
-		data->Extreme_WindSpeed = max;
-		data->Standard_WindSpeed = speed[2];
+		data->Max_WindSpeed = max / 10.0;
+		data->Extreme_WindSpeed = max / 10.0;
+		data->Standard_WindSpeed = speed[2] / 10.0;
 	}
 #endif
 
@@ -341,7 +355,9 @@ void *sensor_sample_qixiang_1(void * arg)
 		if ((flag & 0x1) == 0x01) {
 			memset(buf, 0, 64);
 			if (Sensor_Can_ReadData(Sensor_CAN_List_Qixiang[0].addr, buf) == 0) {
-				temp[i] = (buf[6] << 8) | buf[7];
+				temp[i] = ((buf[6] & 0x7f) << 8) | buf[7];
+				if (buf[6] & 0x80)
+					temp[i] = 0 - temp[i];
 				humi[i] = (buf[8] << 8) | buf[9];
 				pres[i] = (buf[10] << 8) | buf[11];
 				logcat("Sample: i = %d, state = 0x%x\n", i, buf[18]);
@@ -349,6 +365,9 @@ void *sensor_sample_qixiang_1(void * arg)
 				if (buf[18] != 0)
 					alarm |= (buf[18] & 0x07) << 5;
 			}
+			else
+				continue;
+
 			if (i == 5) {
 				s_data.Air_Temperature = (float)sample_avg(temp, 6) / 10;
 				s_data.Humidity = (usint)sample_avg(humi, 6);
@@ -529,6 +548,77 @@ void *sensor_sample_windAvg(void * arg)
 	return 0;
 }
 
+void *sensor_qixiang_rs485(void * arg)
+{
+	int i, j;
+	byte buf[64];
+	int temp[6];
+	int humi[6];
+	int pres[6];
+	float f_threshold = 0.0;
+	int   i_threshold = 0;
+	byte addr_temp = 0x01;
+
+	logcat("Sensor: Get data from rs485 device.\n");
+
+	memset(temp, 0, 6);
+	memset(humi, 0, 6);
+	memset(pres, 0, 6);
+	j = 0;
+
+	for (i = 0; i < 6; i++) {
+		memset(buf, 0, 64);
+		if (Sensor_RS485_ReadData(addr_temp, buf) == 0) {
+			temp[j] = ((buf[4] & 0x7f) << 8) | buf[5];
+			if (buf[6] & 0x80)
+				temp[j] = 0 - temp[j];
+			humi[j] = (buf[6] << 8) | buf[7];
+			pres[j] = (buf[8] << 8) | buf[9];
+			logcat("Sample: i = %d, state = 0x%x\n", i, buf[18]);
+			logcat("Sample: temp = %d, humi = %d, press = %d\n", temp[j], humi[j], pres[j]);
+			j++;
+		}
+		else
+			continue;
+
+		if ((i == 5) && (j > 0)) {
+			s_data.Air_Temperature = (float)sample_avg(temp, j) / 10;
+			s_data.Humidity = (usint)sample_avg(humi, j);
+			s_data.Air_Pressure = (float)sample_avg(pres, 6);
+			CMA_Env_Parameter.temp = s_data.Air_Temperature;
+
+			if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 6, &f_threshold) == 0) {
+//				logcat("temp = %f, f_threshold = %f \n", s_data.Air_Temperature, f_threshold);
+				if (s_data.Air_Temperature > f_threshold) {
+					s_data.Alerm_Flag |= (1 << 5);
+				}
+			}
+			else {
+				logcat("Sensor Get temp threshold error.\n");
+			}
+
+			if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 7, &i_threshold) == 0) {
+				if (s_data.Humidity > i_threshold)
+					s_data.Alerm_Flag |= (1 << 6);
+			}
+
+			if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 8, &f_threshold) == 0) {
+				if (s_data.Air_Pressure > f_threshold)
+					s_data.Alerm_Flag |= (1 << 7);
+			}
+		}
+
+		if (i < 5)
+			sleep(8);
+	}
+
+	if (j > 0) {
+		sensor_status |= (1 << 0);
+	}
+
+	return 0;
+}
+
 static volatile int zigbee_fault_count = 0;
 
 void *sensor_qixiang_zigbee(void * arg)
@@ -566,7 +656,7 @@ int Sensor_Sample_Qixiang(void)
 {
 	int ret = 0;
 	int flag;
-	pthread_t p1 = -1, p2 = -1;
+	pthread_t p1 = -1, p2 = -1, p3 = -1;
 	int p1_wait = 0;
 #if 0
 	time_t now, expect;
@@ -585,7 +675,12 @@ int Sensor_Sample_Qixiang(void)
 	/* Zigbee Sensor Operation */
 	ret = pthread_create(&p2, NULL, sensor_qixiang_zigbee, NULL);
 	if (ret != 0)
-		logcat("Sensor: can't create thread.");
+		logcat("Sensor: can't create zigbee thread.");
+
+	/* RS485 Sensor Operation */
+	ret = pthread_create(&p3, NULL, sensor_qixiang_rs485, NULL);
+	if (ret != 0)
+		logcat("Sensor: can't create rs485 thread.");
 
 	flag = Sensor_Detect_Qixiang();
 	logcat("flag = %d\n", flag);
@@ -662,6 +757,10 @@ int Sensor_Sample_Qixiang(void)
 	ret = pthread_join(p2, NULL);
 	if (ret != 0)
 		logcat("CMD: can't join with p2 thread.");
+
+	ret = pthread_join(p3, NULL);
+	if (ret != 0)
+		logcat("CMD: can't join with p3 thread.");
 
 //	data_qixiang_flag = 1;
 	if (data_qixiang_flag) {
@@ -1266,6 +1365,86 @@ int Sensor_Can_Config(usint addr, usint t)
 	return 0;
 }
 
+int Sensor_RS485_ReadData(byte addr, byte *buf)
+{
+	byte cmd[13] = {0xa5, 0x5a, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x35, 0x3a, 0xb5};
+//	byte cmd_2[13] = {0xa5, 0x5a, 0x05, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x34, 0xc9, 0xb5};
+	byte rbuf[16];
+	usint crc16 = 0;
+	int timeout = 2;
+	int fd = -1;
+	int ret = 0, i = 0;
+
+//	logcat("--------- Enter func: %s -----------\n", __func__);
+
+	pthread_mutex_lock(&rs485_mutex);
+
+	fd = uart_open_dev(UART_PORT_RS485);
+	if (fd == -1) {
+		logcat("RS485 Open port: %s\n", strerror(errno));
+		pthread_mutex_unlock(&rs485_mutex);
+		return -1;
+	}
+	uart_set_speed(fd, UART_RS485_SPEDD);
+	if(uart_set_parity(fd, 8, 1, 'N') == -1) {
+		logcat ("RS485 %s: Set Parity Error", UART_PORT_RS485);
+		goto err;
+	}
+
+	if (buf == NULL)
+		goto err;
+
+	cmd[2] = addr;
+	crc16 = RTU_CRC(cmd, 10);
+	cmd[10] = (crc16 & 0xff00) >> 8;
+	cmd[11] = crc16 & 0x00ff;
+
+#ifdef _DEBUG
+	logcat("RS485 Sensor Send Cmd: ");
+	debug_out(cmd, 8);
+#endif
+
+	system("echo 1 >/sys/devices/platform/gpio-power.0/rs485_direction");
+	ret = io_writen(fd, cmd, 13);
+	if (ret != 13) {
+		logcat("RS485 Sensor: write error, ret = %d\n", ret);
+		goto err;
+	}
+	usleep(100 * 1000);
+
+	system("echo 0 >/sys/devices/platform/gpio-power.0/rs485_direction");
+	usleep(500 * 1000);
+	memset(rbuf, 0, 16);
+	for(i = 0; i < 3; i++) {
+		ret = io_readn(fd, rbuf, 13, timeout);
+		if (ret <= 0) {
+			logcat("RS485 Sensor: read1 error, ret = %d, i = %d\n", ret, i);
+			continue;
+		}
+		else
+			break;
+	}
+	if (i == 3)
+		goto err;
+
+	crc16 = (rbuf[10] << 8) | rbuf[11];
+	if (crc16 != RTU_CRC(rbuf, 10)) {
+		logcat("RS485 Sensor: CRC Check error.\n");
+		goto err;
+	}
+
+	close(fd);
+
+	pthread_mutex_unlock(&rs485_mutex);
+
+	return 0;
+
+err:
+	close(fd);
+	pthread_mutex_unlock(&rs485_mutex);
+	return -1;
+}
+
 int Camera_GetImages(char *ImageName, byte presetting, byte channel)
 {
 	Ctl_image_device_t par;
@@ -1680,6 +1859,8 @@ int Camera_Control(byte action, byte presetting, byte channel)
 
 	logcat("Camera Control: action = %d, preSetting = %d\n", action, presetting);
 
+	pthread_mutex_lock(&rs485_mutex);
+
 	switch (action) {
 	case CAMERA_ACTION_POWERON:
 		Camera_PowerOn(CAMERA_DEVICE_ADDR);
@@ -1715,6 +1896,8 @@ int Camera_Control(byte action, byte presetting, byte channel)
 		logcat("CMD: Invalid camera control action.\n");
 		break;
 	}
+
+	pthread_mutex_unlock(&rs485_mutex);
 
 	return ret;
 }

@@ -13,7 +13,7 @@ int uart_open_dev(char *dev)
 {
 	int fd = open(dev, O_RDWR);  //| O_NOCTTY | O_NDELAY
 	if (-1 == fd) { 			
-		logcat("serial port open error: %s", strerror(errno));
+		logcat("serial port open error: %s\n", strerror(errno));
 		return -1;		
 	}
 	else {
@@ -48,7 +48,7 @@ void uart_set_speed(int fd, int speed)
 			Opt.c_cflag |= (CLOCAL | CREAD);
 			status = tcsetattr(fd, TCSANOW, &Opt);  
 			if  (status != 0) {        
-				logcat("tcsetattr: %s", strerror(errno));
+				logcat("tcsetattr: %s\n", strerror(errno));
 				return;
 			}    
 			tcflush(fd,TCIOFLUSH);   
@@ -61,7 +61,7 @@ int uart_set_parity(int fd,int databits,int stopbits,int parity)
 {
 	struct termios options; 
 	if (tcgetattr(fd, &options)  !=  0) {
-		logcat("SetupSerial 1: %s", strerror(errno));
+		logcat("SetupSerial 1: %s\n", strerror(errno));
 		return -1;  
 	}
 
@@ -129,7 +129,7 @@ int uart_set_parity(int fd,int databits,int stopbits,int parity)
 	options.c_cc[VTIME] = 150; /* 设置超时15 seconds*/   
 	options.c_cc[VMIN] = 0; /* Update the options and do it NOW */
 	if (tcsetattr(fd,TCSANOW,&options) != 0) { 
-		logcat("SetupSerial 3: %s", strerror(errno));
+		logcat("SetupSerial 3: %s\n", strerror(errno));
 		return -1;  
 	} 
 	

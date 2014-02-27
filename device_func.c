@@ -565,7 +565,7 @@ int Device_getNet_info(Ctl_net_adap_t  *adap)
 
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
 	if (sock == -1) {
-		logcat("socket: %s", strerror(errno));
+		logcat("socket: %s\n", strerror(errno));
 		return -1;
 	}
 
@@ -575,7 +575,7 @@ int Device_getNet_info(Ctl_net_adap_t  *adap)
 
 	/*获取ip*/
 	if (ioctl(sock, SIOCGIFADDR, &ifr) < 0) {
-		logcat("ioctl: %s", strerror(errno));
+		logcat("ioctl: %s\n", strerror(errno));
 		return -1;
 	}
 	memcpy(&sin, &ifr.ifr_addr, sizeof(sin));
@@ -584,7 +584,7 @@ int Device_getNet_info(Ctl_net_adap_t  *adap)
 
 	/*获取子网掩码*/
 	if (ioctl(sock, SIOCGIFNETMASK, &ifr)< 0) {
-		logcat("ioctl: %s", strerror(errno));
+		logcat("ioctl: %s\n", strerror(errno));
 		return -1;
 	}
 	memcpy(&sin, &ifr.ifr_addr, sizeof(sin));
