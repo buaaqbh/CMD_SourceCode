@@ -462,7 +462,7 @@ int CMA_Send_SensorData(int fd, int type, void *data)
 
 	resData[CMD_GetMsgTypeIndex(type)].res = -1;
 
-	return CMD_WaitStatus_Res(type, 10);
+	return CMD_WaitStatus_Res(type, 15);
 }
 
 int CMA_Check_Send_SensorData(int fd, int type)
@@ -539,11 +539,11 @@ int CMA_Check_Send_SensorData(int fd, int type)
 //		logcat("total = %d, i = %d\n", total, i);
 		memset(&record, 0, record_len);
 		if (File_GetRecordByIndex(filename, &record, record_len, i) == record_len) {
-			logcat("CMD Send Data: filename = %s, record_len = %d, i = %d, total = %d\n", filename, record_len, i, total);
 			memcpy(&flag, ((byte *)&record + (record_len - 4)), 4);
 			memcpy(&t, &record, sizeof(time_t));
-			logcat("CMD Send Data: flag = %d, time: %s\n", flag, ctime(&t));
 			if (flag == 0) {
+				logcat("CMD Send Data: filename = %s, record_len = %d, i = %d, total = %d\n", filename, record_len, i, total);
+				logcat("CMD Send Data: flag = %d, time: %s", flag, ctime(&t));
 				ret = CMA_Send_SensorData(fd, type, (record + sizeof(time_t)));
 				if (ret < 0)
 					continue;
@@ -552,6 +552,7 @@ int CMA_Check_Send_SensorData(int fd, int type)
 					flag = 0xff;
 					memcpy(((byte *)&record + record_len - 4), &flag, 4);
 					File_UpdateRecordByIndex(filename, &record, record_len, i);
+					system("sync");
 					/*
 					File_GetRecordByIndex(filename, &record, record_len, i);
 					if (type == CMA_MSG_TYPE_DATA_TGQXIE) {

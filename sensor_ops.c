@@ -190,7 +190,7 @@ static int sample_avg(int *data, int size)
 	int i;
 	int max, min, total;
 	float avg = 0.0;
-	if ((data == NULL) | (size < 2))
+	if ((data == NULL) | (size <= 2))
 		return 0;
 
 	max = min = total = data[0];
@@ -217,9 +217,11 @@ static void CMA_GetWind_Data(Data_qixiang_t *data)
 	int r_len = 0;
 	time_t now = rtc_get_time();
 #endif
-	int i = 0;
+	int i = 0, j = 0;
 	float f_threshold = 0.0;
 	int   i_threshold = 0;
+	int sensor_can = 0;
+	int sum;
 
 	data->Average_WindSpeed_10min = 0;
 	data->Average_WindDirection_10min = 0;
@@ -271,40 +273,50 @@ static void CMA_GetWind_Data(Data_qixiang_t *data)
 
 		memset(speed, 0, 3);
 		memset(speed_d, 0, 3);
+		j = 0;
 		for (i = 0; i < 3; i++) {
 			memset(buf, 0, 64);
 			if (Sensor_Can_ReadData(Sensor_CAN_List_Qixiang[1].addr, buf) == 0) {
-				speed[i] = (buf[6] << 8) | buf[7];
-				speed_d[i] = (buf[8] << 8) | buf[9];
-				if (max < speed[i])
-					max = speed[i];
+				speed[j] = (buf[6] << 8) | buf[7];
+				speed_d[j] = (buf[8] << 8) | buf[9];
+				if (max < speed[j])
+					max = speed[j];
 				logcat("Windy Sample CAN: i = %d, state = 0x%x\n", i, buf[18]);
-				logcat("Windy Sample CAN: speed = %d, direction = %d\n", speed[i], speed_d[i]);
+				logcat("Windy Sample CAN: speed = %d, direction = %d\n", speed[j], speed_d[j]);
 
 				data_qixiang_flag++;
+				sensor_can = 1;
+				j++;
 			}
 
-			if (Sensor_RS485_ReadData(0x05, buf) == 0) {
-				speed[i] = (buf[4] << 8) | buf[5];
-				speed_d[i] = (buf[6] << 8) | buf[7];
-				if (max < speed[i])
-					max = speed[i];
+			if ((sensor_can == 0) && (Sensor_RS485_ReadData(0x05, buf) == 0)) {
+				speed[j] = (buf[4] << 8) | buf[5];
+				speed_d[j] = (buf[6] << 8) | buf[7];
+				if (max < speed[j])
+					max = speed[j];
 				logcat("Windy Sample RS485: i = %d, state = 0x%x\n", i, buf[18]);
-				logcat("Windy Sample RS485: speed = %d, direction = %d\n", speed[i], speed_d[i]);
+				logcat("Windy Sample RS485: speed = %d, direction = %d\n", speed[j], speed_d[j]);
 
 				sensor_status |= (3 << 1);
 
 				data_qixiang_flag++;
+				j++;
 			}
 			if (i < 2)
 				sleep(1);
 		}
 
-		data->Average_WindSpeed_10min = (float)(speed[0] + speed[1] + speed[2]) / 30.0;
-		data->Average_WindDirection_10min = speed_d[2];
-		data->Max_WindSpeed = max / 10.0;
-		data->Extreme_WindSpeed = max / 10.0;
-		data->Standard_WindSpeed = speed[2] / 10.0;
+		if (j > 0) {
+			sum = 0;
+			for (i = 0; i < j; i++)
+				sum += speed[i];
+
+			data->Average_WindSpeed_10min = (float)(sum) / j;
+			data->Average_WindDirection_10min = speed_d[j - 1];
+			data->Max_WindSpeed = max / 10.0;
+			data->Extreme_WindSpeed = max / 10.0;
+			data->Standard_WindSpeed = speed[2] / 10.0;
+		}
 	}
 #endif
 
@@ -1379,9 +1391,9 @@ int Sensor_RS485_ReadData(byte addr, byte *buf)
 //	byte cmd_2[13] = {0xa5, 0x5a, 0x05, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x34, 0xc9, 0xb5};
 	byte rbuf[16];
 	usint crc16 = 0;
-	int timeout = 2;
+	int timeout = 5;
 	int fd = -1;
-	int ret = 0, i = 0;
+	int ret = 0;
 
 //	logcat("--------- Enter func: %s -----------\n", __func__);
 
@@ -1423,17 +1435,11 @@ int Sensor_RS485_ReadData(byte addr, byte *buf)
 	system("echo 0 >/sys/devices/platform/gpio-power.0/rs485_direction");
 	usleep(500 * 1000);
 	memset(rbuf, 0, 16);
-	for(i = 0; i < 3; i++) {
-		ret = io_readn(fd, rbuf, 13, timeout);
-		if (ret <= 0) {
-			logcat("RS485 Sensor 0x%x: read1 error, ret = %d, i = %d\n", addr, ret, i);
-			continue;
-		}
-		else
-			break;
-	}
-	if (i == 3)
+	ret = io_readn(fd, rbuf, 13, timeout);
+	if (ret <= 0) {
+		logcat("RS485 Sensor 0x%x: read error, ret = %d\n", addr, ret);
 		goto err;
+	}
 
 	crc16 = (rbuf[10] << 8) | rbuf[11];
 	if (crc16 != RTU_CRC(rbuf, 10)) {
