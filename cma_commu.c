@@ -35,12 +35,15 @@ static volatile int imageRcvLen = 0;
 static void print_message(byte *buf, int len)
 {
 	int i;
+	logcat("");
 	for(i = 0; i<len; i++) {
-		logcat("0x%02x ", buf[i]);
-		if (((i+1)%16) == 0)
-			logcat("\n");
+		logcat_raw("0x%02x ", buf[i]);
+		if (((i+1)%16) == 0) {
+			logcat_raw("\n");
+			logcat("");
+		}
 	}
-	logcat("\n");
+	logcat_raw("\n");
 }
 #endif
 
@@ -536,8 +539,10 @@ int CMA_Check_Send_SensorData(int fd, int type)
 //		logcat("total = %d, i = %d\n", total, i);
 		memset(&record, 0, record_len);
 		if (File_GetRecordByIndex(filename, &record, record_len, i) == record_len) {
-//			logcat("filename = %s, record_len = %d\n", filename, record_len);
+			logcat("CMD Send Data: filename = %s, record_len = %d, i = %d, total = %d\n", filename, record_len, i, total);
 			memcpy(&flag, ((byte *)&record + (record_len - 4)), 4);
+			memcpy(&t, &record, sizeof(time_t));
+			logcat("CMD Send Data: flag = %d, time: %s\n", flag, ctime(&t));
 			if (flag == 0) {
 				ret = CMA_Send_SensorData(fd, type, (record + sizeof(time_t)));
 				if (ret < 0)

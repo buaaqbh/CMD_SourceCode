@@ -62,7 +62,7 @@ int Modem_Init(void)
 
 	uart_set_speed(fd, SMS_SERIAL_SPEED);
 	if(uart_set_parity(fd, 8, 1, 'N') == -1) {
-		logcat ("Set Parity Error");
+		logcat ("Set Parity Error\n");
 		return -1;
 	}
 
@@ -105,10 +105,11 @@ int Modem_WaitResponse(int fd, char *expect, int retry)
 /*		{
 			logcat("nread = %d \n", nread);
 			int j;
+			logcat("");
 			for (j = 0; j < nread; j++) {
 					if ((j % 16) == 0)
 							logcat("\n");
-					logcat("0x%x ", rbuf[j]);
+					logcat_raw("0x%x ", rbuf[j]);
 			}
 			logcat("\n");
 		} */

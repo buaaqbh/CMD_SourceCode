@@ -427,16 +427,16 @@ int main(int argc, char *argv[])
 
 	ret = pthread_create(&p_heartbeat, NULL, socket_heartbeat_func, NULL);
 	if (ret != 0)
-		logcat("Sensor: can't create heartbeat thread.");
+		logcat("Sensor: can't create heartbeat thread.\n");
 
 	ret = pthread_create(&pid_socket, NULL, socket_receive_func, NULL);
 	if (ret != 0)
-		logcat("Sensor: can't create receive thread.");
+		logcat("Sensor: can't create receive thread.\n");
 
 	for (i = 0;i < CMD_SERVERTHREAD_NUM; i++) {
 		ret = pthread_create(&pid_server[i], NULL, cmd_server_func, NULL);
 		if (ret != 0)
-			logcat("Sensor: can't create server thread.");
+			logcat("Sensor: can't create server thread.\n");
 	}
 
 	entry = "qixiang:samp_period";
@@ -462,7 +462,7 @@ int main(int argc, char *argv[])
 
 	entry = "tgqingxie:samp_period";
 	if ((cycle = Device_getSampling_Cycle(entry)) < 0)
-			cycle = 60;
+			cycle = 10;
 	memset(&sample_dev_1, 0, sizeof(struct rtc_alarm_dev));
 	sample_dev_1.func = Sensor_Sample_loop_TGQingXie;
 	sample_dev_1.repeat = 1;
@@ -478,7 +478,7 @@ int main(int argc, char *argv[])
 
 	entry = "fubing:samp_period";
 	if ((cycle = Device_getSampling_Cycle(entry)) < 0)
-			cycle = 60;
+			cycle = 10;
 	memset(&sample_dev_2, 0, sizeof(struct rtc_alarm_dev));
 	sample_dev_2.func = Sensor_Sample_loop_FuBing;
 	sample_dev_2.repeat = 1;
@@ -510,16 +510,16 @@ int main(int argc, char *argv[])
 
 	ret = pthread_join(p_heartbeat, NULL);
 	if (ret != 0)
-		logcat("CMD: can't join with hearbeat thread.");
+		logcat("CMD: can't join with hearbeat thread.\n");
 
 	ret = pthread_join(pid_socket, NULL);
 	if (ret != 0)
-		logcat("CMD: can't join with socket receive thread.");
+		logcat("CMD: can't join with socket receive thread.\n");
 
 	for (i = 0;i < CMD_SERVERTHREAD_NUM; i++) {
 		ret = pthread_join(pid_server[i], NULL);
 		if (ret != 0)
-			logcat("CMD: can't join with server thread.");
+			logcat("CMD: can't join with server thread.\n");
 	}
 
 	pthread_spin_destroy(&spinlock);

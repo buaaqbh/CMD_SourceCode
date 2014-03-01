@@ -26,8 +26,8 @@ static void debug_out(byte *buf, int len)
 {
 	int i;
 	for (i = 0; i < len; i++)
-		logcat("0x%02x ", (unsigned char)buf[i]);
-	logcat("\n");
+		logcat_raw("0x%02x ", (unsigned char)buf[i]);
+	logcat_raw("\n");
 }
 #endif
 
@@ -53,7 +53,7 @@ int Zigbee_Get_Device(int speed)
 
 	uart_set_speed(fd, speed);
 	if(uart_set_parity(fd, 8, 1, 'N') == -1) {
-		logcat ("Set Parity Error");
+		logcat ("Set Parity Error\n");
 		return -1;
 	}
 

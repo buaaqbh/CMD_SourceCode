@@ -30,8 +30,9 @@
 static void print_message(byte *buf, int len)
 {
 	int i;
+	logcat("");
 	for(i = 0; i<len; i++) {
-		logcat("0x%02x ", buf[i]);
+		logcat_raw("0x%02x ", buf[i]);
 		if (((i+1)%16) == 0)
 			logcat("\n");
 	}
@@ -61,7 +62,7 @@ int Camera_SendCmd(byte *cmd, int len)
 	}
 	uart_set_speed(fd, UART_RS485_SPEDD);
 	if(uart_set_parity(fd, 8, 1, 'N') == -1) {
-		logcat ("Set Parity Error");
+		logcat ("Set Parity Error\n");
 		return -1;
 	}
 

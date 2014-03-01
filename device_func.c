@@ -98,7 +98,7 @@ int mysystem(char *input, char *output, int maxlen)
 	reslen = fread(output, sizeof(char), maxlen, stream);
 	status = pclose(stream);
 	if (-1 == status) {
-		logcat("pclose error!");
+		logcat("pclose error!\n");
 		return -1;
 	}
 	else {
@@ -339,7 +339,7 @@ int code_convert(char *from_charset, char *to_charset, char *inbuf, int inlen, c
 	}
 	memset(outbuf, 0, outlen);
 	if (iconv(cd, pin, (size_t *)&inlen, pout, (size_t *)&outlen) == -1) {
-		perror("iconv");
+		logcat("iconv: %s\n", strerror(errno));
 //		return -1;
 	}
 	iconv_close(cd);

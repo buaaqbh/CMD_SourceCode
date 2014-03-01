@@ -12,5 +12,6 @@
 #include <errno.h>
 
 void logcat(const char *frm, ...);
+void logcat_raw(const char *frm, ...);
 
 #endif /* LOGCAT_H_ */

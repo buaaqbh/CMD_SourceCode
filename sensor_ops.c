@@ -120,14 +120,14 @@ typedef struct sensor_device {
 static volatile unsigned int sensor_status = 0xff;
 static volatile unsigned int sensor_status_pre = 0xff;
 
-#define _DEBUG
+//#define _DEBUG
 #ifdef _DEBUG
 static void debug_out(byte *buf, int len)
 {
 	int i;
 	for (i = 0; i < len; i++)
-		logcat("0x%02x ", (unsigned char)buf[i]);
-	logcat("\n");
+		logcat_raw("0x%02x ", (unsigned char)buf[i]);
+	logcat_raw("\n");
 }
 #endif
 
@@ -280,6 +280,8 @@ static void CMA_GetWind_Data(Data_qixiang_t *data)
 					max = speed[i];
 				logcat("Windy Sample CAN: i = %d, state = 0x%x\n", i, buf[18]);
 				logcat("Windy Sample CAN: speed = %d, direction = %d\n", speed[i], speed_d[i]);
+
+				data_qixiang_flag++;
 			}
 
 			if (Sensor_RS485_ReadData(0x05, buf) == 0) {
@@ -291,6 +293,8 @@ static void CMA_GetWind_Data(Data_qixiang_t *data)
 				logcat("Windy Sample RS485: speed = %d, direction = %d\n", speed[i], speed_d[i]);
 
 				sensor_status |= (3 << 1);
+
+				data_qixiang_flag++;
 			}
 			if (i < 2)
 				sleep(1);
@@ -577,6 +581,7 @@ void *sensor_qixiang_rs485(void * arg)
 			logcat("Sample: i = %d, state = 0x%x\n", i, buf[18]);
 			logcat("Sample: temp = %d, humi = %d, press = %d\n", temp[j], humi[j], pres[j]);
 			j++;
+			data_qixiang_flag++;
 		}
 		else
 			continue;
@@ -675,12 +680,12 @@ int Sensor_Sample_Qixiang(void)
 	/* Zigbee Sensor Operation */
 	ret = pthread_create(&p2, NULL, sensor_qixiang_zigbee, NULL);
 	if (ret != 0)
-		logcat("Sensor: can't create zigbee thread.");
+		logcat("Sensor: can't create zigbee thread.\n");
 
 	/* RS485 Sensor Operation */
 	ret = pthread_create(&p3, NULL, sensor_qixiang_rs485, NULL);
 	if (ret != 0)
-		logcat("Sensor: can't create rs485 thread.");
+		logcat("Sensor: can't create rs485 thread.\n");
 
 	flag = Sensor_Detect_Qixiang();
 	logcat("flag = %d\n", flag);
@@ -694,7 +699,7 @@ int Sensor_Sample_Qixiang(void)
 	if ((flag & 0x0019) != 0) {
 		ret = pthread_create(&p1, NULL, sensor_sample_qixiang_1, &flag);
 		if (ret != 0)
-			logcat("Sensor: can't create thread.");
+			logcat("Sensor: can't create thread.\n");
 		p1_wait = 1;
 	}
 
@@ -751,16 +756,16 @@ int Sensor_Sample_Qixiang(void)
 	if (p1_wait) {
 		ret = pthread_join(p1, NULL);
 		if (ret != 0)
-			logcat("CMD: can't join with p1 thread.");
+			logcat("CMD: can't join with p1 thread.\n");
 	}
 
 	ret = pthread_join(p2, NULL);
 	if (ret != 0)
-		logcat("CMD: can't join with p2 thread.");
+		logcat("CMD: can't join with p2 thread.\n");
 
 	ret = pthread_join(p3, NULL);
 	if (ret != 0)
-		logcat("CMD: can't join with p3 thread.");
+		logcat("CMD: can't join with p3 thread.\n");
 
 //	data_qixiang_flag = 1;
 	if (data_qixiang_flag) {
@@ -814,10 +819,10 @@ int Sensor_Sample_TGQingXie(Data_incline_t *data)
 		angle_y = (buf[8] << 8) | buf[9];
 		logcat("Sample: angle_x = %d, angle_y = %d\n", angle_x, angle_y);
 
-		data->Angle_X = asin((angle_x - 1024.0) / 819.0) * 180 / 3.14;
-		data->Angle_Y = asin((angle_y - 1024.0) / 819.0) * 180 / 3.14;
-//		data->Angle_X = angle_x / 100.0;
-//		data->Angle_Y = angle_y / 100.0;
+//		data->Angle_X = asin((angle_x - 1024.0) / 819.0) * 180 / 3.14;
+//		data->Angle_Y = asin((angle_y - 1024.0) / 819.0) * 180 / 3.14;
+		data->Angle_X = angle_x / 100.0;
+		data->Angle_Y = angle_y / 100.0;
 		record_len = sizeof(struct record_incline);
 		memcpy(&record.data, data, sizeof(Data_incline_t));
 		if (File_AppendRecord(RECORD_FILE_TGQXIE, (char *)&record, record_len) < 0) {
@@ -1107,21 +1112,21 @@ static int can_socket_init(char *interface)
 
 	s = socket(family, type, proto);
 	if (s < 0) {
-		perror("socket");
+		logcat("socket: %s\n", strerror(errno));
 		return -1;
 	}
 
 	addr.can_family = family;
 	strcpy(ifr.ifr_name, interface);
 	if (ioctl(s, SIOCGIFINDEX, &ifr)) {
-		perror("ioctl");
+		logcat("ioctl: %s\n", strerror(errno));
 		close(s);
 		return -1;
 	}
 	addr.can_ifindex = ifr.ifr_ifindex;
 
 	if (bind(s, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-		perror("bind");
+		logcat("bind: %s\n", strerror(errno));
 		close(s);
 		return -1;
 	}
@@ -1165,7 +1170,7 @@ int Can_Send(byte *buf, int len)
 	while (loopcount--) {
 		ret = write(s, &frame, sizeof(frame));
 		if (ret == -1) {
-			perror("CAN Device write");
+			logcat("CAN Device write: %s\n", strerror(errno));
 			break;
 		}
 	}
@@ -1190,14 +1195,15 @@ int Can_Recv(byte *buf)
 	pbuf = buf;
 	for (i = 0; i < 3; i++) {
 		if ((nbytes = read(s, &frame, sizeof(struct can_frame))) < 0) {
-			perror("read");
+			logcat("CAN Device read: %s\n", strerror(errno));
 			return -1;
 		}
 		memcpy(pbuf, frame.data, frame.can_dlc);
 		pbuf += frame.can_dlc;
 		logcat("nbytes = %d, dlc = %d\n", nbytes, frame.can_dlc);
+		logcat("");
 		for (i = 0; i < 8; i++)
-			logcat("0x%02x ", frame.data[i]);
+			logcat_raw("0x%02x ", frame.data[i]);
 		logcat("\n");
 	}
 
@@ -1249,14 +1255,14 @@ int Sensor_Can_ReadData(usint addr, byte *buf)
 		if (errno == ENOBUFS) {
 			logcat("CAN No write buffer left.\n");
 		}
-		perror("CAN Device write");
+		logcat("CAN Device write: %s\n", strerror(errno));
 		goto err;
 	}
 
 	pbuf = buf;
 	for (i = 0; i < 3; i++) {
 		if ((ret = io_readn(s, &frame, sizeof(struct can_frame), timeout)) < 0) {
-			perror("CAN Device read");
+			logcat("CAN Device read: %s\n", strerror(errno));
 			goto err;
 		}
 		memcpy(pbuf, frame.data, frame.can_dlc);
@@ -1264,8 +1270,9 @@ int Sensor_Can_ReadData(usint addr, byte *buf)
 #ifdef _DEBUG
 //		logcat("nbytes = %d, dlc = %d\n", ret, frame.can_dlc);
 		int j;
+		logcat("");
 		for (j = 0; j < 8; j++)
-			logcat("%02x ", frame.data[j]);
+			logcat_raw("%02x ", frame.data[j]);
 		logcat("\n");
 #endif
 	}
@@ -1325,13 +1332,13 @@ int Sensor_Can_Config(usint addr, usint t)
 
 	ret = write(s, &frame, sizeof(frame));
 	if (ret == -1) {
-		perror("write");
+		logcat("CAN Device write: %s\n", strerror(errno));
 		close(s);
 		return -1;
 	}
 
 	if ((ret = read(s, &frame, sizeof(struct can_frame))) < 0) {
-		perror("read");
+		logcat("CAN Device read: %s\n", strerror(errno));
 		close(s);
 		return -1;
 	}
@@ -1341,8 +1348,9 @@ int Sensor_Can_Config(usint addr, usint t)
 	}
 
 	logcat("nbytes = %d, dlc = %d\n", ret, frame.can_dlc);
+	logcat("");
 	for (i = 0; i < 8; i++)
-		logcat("0x%02x ", frame.data[i]);
+		logcat_raw("0x%02x ", frame.data[i]);
 	logcat("\n");
 
 	memcpy(rbuf, frame.data, 8);
@@ -1400,17 +1408,17 @@ int Sensor_RS485_ReadData(byte addr, byte *buf)
 	cmd[11] = crc16 & 0x00ff;
 
 #ifdef _DEBUG
-	logcat("RS485 Sensor Send Cmd: ");
-	debug_out(cmd, 8);
+	logcat("RS485 Sensor 0x%x Send Cmd: ", addr);
+	debug_out(cmd, 13);
 #endif
 
 	system("echo 1 >/sys/devices/platform/gpio-power.0/rs485_direction");
 	ret = io_writen(fd, cmd, 13);
 	if (ret != 13) {
-		logcat("RS485 Sensor: write error, ret = %d\n", ret);
+		logcat("RS485 Sensor 0x%x: write error, ret = %d\n", addr, ret);
 		goto err;
 	}
-	usleep(100 * 1000);
+	usleep(250 * 1000);
 
 	system("echo 0 >/sys/devices/platform/gpio-power.0/rs485_direction");
 	usleep(500 * 1000);
@@ -1418,7 +1426,7 @@ int Sensor_RS485_ReadData(byte addr, byte *buf)
 	for(i = 0; i < 3; i++) {
 		ret = io_readn(fd, rbuf, 13, timeout);
 		if (ret <= 0) {
-			logcat("RS485 Sensor: read1 error, ret = %d, i = %d\n", ret, i);
+			logcat("RS485 Sensor 0x%x: read1 error, ret = %d, i = %d\n", addr, ret, i);
 			continue;
 		}
 		else
@@ -1429,7 +1437,7 @@ int Sensor_RS485_ReadData(byte addr, byte *buf)
 
 	crc16 = (rbuf[10] << 8) | rbuf[11];
 	if (crc16 != RTU_CRC(rbuf, 10)) {
-		logcat("RS485 Sensor: CRC Check error.\n");
+		logcat("RS485 Sensor 0x%x: CRC Check error.\n", addr);
 		goto err;
 	}
 

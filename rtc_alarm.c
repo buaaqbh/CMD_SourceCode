@@ -80,7 +80,7 @@ time_t rtc_get_time(void)
 	/* Read the RTC time/date */
 	retval = ioctl(rtc_dev_fd, RTC_RD_TIME, &rtc_tm);
 	if (retval == -1) {
-		perror("RTC_RD_TIME ioctl");
+		logcat("RTC_RD_TIME ioctl: %s\n", strerror(errno));
 		return -1;
 	}
 
@@ -97,7 +97,7 @@ int rtc_set_time(struct tm *rtc_tm)
 	/* Set the RTC time/date */
 	retval = ioctl(rtc_dev_fd, RTC_SET_TIME, rtc_tm);
 	if (retval == -1) {
-		perror("RTC_SET_TIME ioctl");
+		logcat("RTC_SET_TIME ioctl: %s\n", strerror(errno));
 		return -1;
 	}
 
@@ -157,7 +157,7 @@ void rtc_trigger_alarm(time_t cur_time)
 	}
 
 	if (!list_empty(&rtc_alarm_list)) {
-//		logcat("rtc update ------------\n");
+		logcat("rtc update ------------\n");
 		rtc_alarm_update();
 	}
 
@@ -175,14 +175,15 @@ void *rtc_alarm_wait(void * arg)
 	while (1) {
 		logcat("RTC_ALARM: Wait for rtc alarm.\n");
 		if (read(rtc_dev_fd, &data, sizeof(unsigned long)) < 0) {
-			perror("RTC read data");
+			logcat("RTC read data: %s\n", strerror(errno));
 			usleep(1000);
 			continue;
 		}
+		logcat("RTC_ALARM: rtc alarm arrived.\n");
 		/* Disable alarm interrupts */
 		retval = ioctl(rtc_dev_fd, RTC_AIE_OFF, 0);
 		if (retval == -1) {
-			perror("RTC_AIE_OFF ioctl");
+			logcat("RTC_AIE_OFF ioctl: %s\n", strerror(errno));
 		}
 
 		cur_time = rtc_get_time();
@@ -199,7 +200,7 @@ int rtc_alarm_init(void)
 
 	rtc_dev_fd = open(rtc_dev, O_RDWR);
 	if (rtc_dev_fd ==  -1) {
-		perror(rtc_dev);
+		logcat("RTC open: %s\n", strerror(errno));
 		return -1;
 	}
 
@@ -207,7 +208,7 @@ int rtc_alarm_init(void)
 
 	ret = pthread_create(&p1, NULL, rtc_alarm_wait, NULL);
 	if (ret != 0)
-		logcat("Sensor: can't create thread.");
+		logcat("Sensor: can't create thread.\n");
 
 	return rtc_dev_fd;
 }
@@ -234,15 +235,10 @@ int rtc_alarm_update(void)
 	}
 	rtc_tm = (struct rtc_time *)gmtime(&dev->expect);
 
-	{
-		logcat("RTC Now:  Time: %s", ctime(&now));
-		logcat("RTC Next: Name: %s, Alarm: %s", rtc_getDevice_name(dev), asctime(gmtime(&dev->expect)));
-	}
-
 	/* Disable alarm interrupts */
 	retval = ioctl(rtc_dev_fd, RTC_AIE_OFF, 0);
 	if (retval == -1) {
-		perror("RTC_AIE_OFF ioctl");
+		logcat("RTC_AIE_OFF ioctl: %s\n", strerror(errno));
 		return -1;
 	}
 
@@ -253,15 +249,20 @@ int rtc_alarm_update(void)
 			logcat("\n...Alarm IRQs not supported.\n");
 			close(rtc_dev_fd);
 		}
-		perror("RTC_ALM_SET ioctl");
+		logcat("RTC_ALM_SET ioctl: %s\n", strerror(errno));
 		return -1;
 	}
 
 	/* Enable alarm interrupts */
 	retval = ioctl(rtc_dev_fd, RTC_AIE_ON, 0);
 	if (retval == -1) {
-		perror("RTC_AIE_ON ioctl");
+		logcat("RTC_AIE_ON ioctl: %s\n", strerror(errno));
 		return -1;
+	}
+
+	{
+		logcat("RTC Now:  Time: %s", ctime(&now));
+		logcat("RTC Next: Name: %s, Alarm: %s", rtc_getDevice_name(dev), asctime(gmtime(&dev->expect)));
 	}
 
 	return 0;
