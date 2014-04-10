@@ -40,6 +40,8 @@ pthread_mutex_t rcvMutex;
 pthread_mutex_t sndMutex;
 pthread_mutex_t imgMutex;
 
+static time_t lastReceive_t = -1;
+
 static void usage(FILE * fp, int argc, char **argv)
 {
 	fprintf (fp,
@@ -80,11 +82,11 @@ void *socket_receive_func(void * arg)
 	while(1) {
 		if (CMA_Env_Parameter.socket_fd > 0) {
 			memset(rbuf, 0, MAX_DATA_BUFSIZE);
-			logcat("CMD: Start to read socket message, fd = %d.\n", CMA_Env_Parameter.socket_fd);
-			ret = Commu_GetPacket(CMA_Env_Parameter.socket_fd, rbuf, MAX_COMBUF_SIZE, 0);
+			logcat("------ CMD: Start to read socket message, fd = %d.\n", CMA_Env_Parameter.socket_fd);
+			ret = Commu_GetPacket(CMA_Env_Parameter.socket_fd, rbuf, MAX_COMBUF_SIZE, 10);
 			if (ret < 0) {
 				if (ret == -2) {
-					logcat("CMD Server receive MSG error!\n");
+					logcat("------ CMD Server receive MSG error!\n");
 					pthread_mutex_lock(&com_mutex);
 					close(CMA_Env_Parameter.socket_fd);
 					CMA_Env_Parameter.socket_fd = -1;
@@ -104,10 +106,7 @@ void *socket_receive_func(void * arg)
 
 			sem_post(&semFull);
 
-//			if (CMA_Server_Process(CMA_Env_Parameter.socket_fd, rbuf) < 0) {
-//				logcat("CMD Server Process error.\n");
-//				continue;
-//			}
+			lastReceive_t = time((time_t *)NULL);;
 		}
 
 		sleep(2);
@@ -144,21 +143,6 @@ void *cmd_server_func(void * arg)
 	return 0;
 }
 
-/*
-static int CMD_WaitStatus_Res(int timeout)
-{
-	while ((CMD_Response_data == -1) && timeout) {
-		sleep(1);
-		timeout--;
-	}
-
-	if (timeout == 0)
-		return -1;
-	else
-		return CMD_Response_data;
-}
-*/
-
 static void CMD_Sleep(int sec)
 {
 	int i = 0;
@@ -189,16 +173,16 @@ void *socket_heartbeat_func(void * arg)
 		}
 
 		logcat("CMD: Send HeartBeat Message.\n");
-		pthread_mutex_lock(&com_mutex);
+//		pthread_mutex_lock(&com_mutex);
 		if (CMA_Send_HeartBeat(CMA_Env_Parameter.socket_fd, CMA_Env_Parameter.id) < 0) {
 			logcat("CMD: Send HeartBeat Message error.\n");
+			close(CMA_Env_Parameter.socket_fd);
 			CMA_Env_Parameter.socket_fd = -1;
 		}
-		pthread_mutex_unlock(&com_mutex);
+//		pthread_mutex_unlock(&com_mutex);
 
 		if (CMD_status_regist == 0) {
 			logcat("CMD: Send Basic Info Message, regist = %d.\n", CMD_status_regist);
-			CMD_Response_data = -1;
 			pthread_mutex_lock(&com_mutex);
 			ret = CMA_Send_BasicInfo(CMA_Env_Parameter.socket_fd, CMA_Env_Parameter.id, 0);
 			pthread_mutex_unlock(&com_mutex);
@@ -452,8 +436,9 @@ int main(int argc, char *argv[])
 	now = rtc_get_time();
 	tm = gmtime(&now);
 	logcat("Now: %s", asctime(tm));
-	expect = now - tm->tm_sec - (tm->tm_min % 10) * 60;
-	expect += 10 * 60;
+//	expect = now - tm->tm_sec - (tm->tm_min % 10) * 60;
+//	expect += 10 * 60;
+	expect = now - tm->tm_sec + (2 - tm->tm_min % 2) * 60;
 //	expect = now + 10;
 	tm = gmtime(&expect);
 	logcat("QiXiang Expect: %s", asctime(tm));

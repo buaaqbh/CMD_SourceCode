@@ -114,7 +114,6 @@ extern unsigned int Sensor_Online_flag;
 unsigned char 	Sensor_L1_type[CMA_MAX_SENSOR_NUM];
 
 extern char *config_file;
-extern volatile int CMD_Response_data;
 
 typedef unsigned long 	ulint;
 typedef long 			lint;

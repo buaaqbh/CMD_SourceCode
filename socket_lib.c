@@ -187,7 +187,7 @@ int socket_send(int sockfd, unsigned char *buf, int len, int timeout)
 	return len;
 }
 
-int socket_recv(int sockfd, unsigned char *buf, int len, int timeout)
+int socket_recv(int sockfd, unsigned char *buf, int len, int timeout, int udp)
 {
 	unsigned char *p_buf = buf;
 	int recvBytes = 0;
@@ -205,6 +205,9 @@ int socket_recv(int sockfd, unsigned char *buf, int len, int timeout)
 	}
 
 	setsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, (const char*)&nRecvBuf, sizeof(int));
+
+	if (udp)
+		return recvBytes = recv(sockfd, p_buf, total_len, 0);
 
 	while(1) {
 		recvBytes = recv(sockfd, p_buf, total_len, 0);

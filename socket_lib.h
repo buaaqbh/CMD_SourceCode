@@ -36,7 +36,7 @@ int start_server(int localport, thrFunc func);
 int connect_server( char *destIp, int destPort, int udp, int timeout);
 int close_socket(int socket_fd);
 int socket_send(int sockfd, unsigned char *buf, int len, int timeout);
-int socket_recv(int sockfd, unsigned char *buf, int len, int timeout);
+int socket_recv(int sockfd, unsigned char *buf, int len, int timeout, int udp);
 int socket_send_udp(char *destIp, int destPort, unsigned char *buf, int len);
 int socket_recv_udp(int localport, unsigned char *buf, int len, int timeout);
 

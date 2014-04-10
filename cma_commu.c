@@ -15,7 +15,6 @@
 #include "rtc_alarm.h"
 #include "file_ops.h"
 
-volatile int CMD_Response_data = 0;
 extern pthread_mutex_t sndMutex;
 extern pthread_mutex_t imgMutex;
 
@@ -24,7 +23,7 @@ typedef struct __reponse_data {
 	int res;
 }Response_data;
 
-static Response_data resData[15];
+static Response_data resData[16];
 static volatile int upgradeLostFlag = 0;
 byte imageRbuf[MAX_COMBUF_SIZE];
 static volatile int imageRcvLen = 0;
@@ -64,7 +63,7 @@ int Commu_GetPacket_Udp(int fd, byte *rbuf, int len, int timeout)
 		return -1;
 	}
 	else {
-		ret = socket_recv(fd, rbuf, len, timeout);
+		ret = socket_recv(fd, rbuf, len, timeout, 1);
 		if (ret < 0)
 			return ret;
 	}
@@ -115,7 +114,7 @@ int Commu_GetPacket(int fd, byte *rbuf, int len, int timeout)
 
 //	logcat("Begin to receive msg, len = %d\n", len);
 	
-	ret = socket_recv(fd, rbuf, sizeof(frame_head_t), timeout);
+	ret = socket_recv(fd, rbuf, sizeof(frame_head_t), timeout, 0);
 	if (ret < 0)
 		return ret;
 
@@ -130,7 +129,7 @@ int Commu_GetPacket(int fd, byte *rbuf, int len, int timeout)
 		return -1;
 	}
 
-	ret = socket_recv(fd, (rbuf + sizeof(frame_head_t)), (size + 2), timeout);
+	ret = socket_recv(fd, (rbuf + sizeof(frame_head_t)), (size + 2), timeout, 0);
 	if (ret < 0)
 		return ret;
 	if (ret != (size + 2))
@@ -178,8 +177,8 @@ int Commu_SendPacket(int fd, frame_head_t *head, byte *data)
 #endif
 
 	if (fd == -1) {
-		ret = socket_send_udp(CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.cma_port, sbuf, size);
-		return ret;
+//		ret = socket_send_udp(CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.cma_port, sbuf, size);
+		return -1;
 	}
 
 	pthread_mutex_lock(&sndMutex);
@@ -240,6 +239,9 @@ static int CMD_GetMsgTypeIndex(byte type)
 		break;
 	case CMA_MSG_TYPE_STATUS_ERROR:
 		index = 14;
+		break;
+	case CMA_MSG_TYPE_STATUS_HEART:
+		index = 15;
 		break;
 	default:
 		logcat("Invalid Sensor tyep.\n");
@@ -387,16 +389,20 @@ int CMA_Server_Process(int fd, byte *rbuf)
 	}
 	else if ((frame_type == CMA_FRAME_TYPE_DATA_RES) || (frame_type == CMA_FRAME_TYPE_STATUS_RES)) {
 		status = *(rbuf + sizeof(frame_head_t));
-		logcat("CMD: Send data response 0x%x.\n", status);
+		logcat("CMD: Receive Send data response 0x%x.\n", status);
 		resData[CMD_GetMsgTypeIndex(msg_type)].msg_type = msg_type;
 		resData[CMD_GetMsgTypeIndex(msg_type)].res = status;
-		CMD_Response_data = status;
+	}
+	else if (msg_type == CMA_MSG_TYPE_STATUS_HEART) {
+		logcat("CMD: Receive Hearbeat response.\n");
+		resData[CMD_GetMsgTypeIndex(msg_type)].msg_type = msg_type;
+		resData[CMD_GetMsgTypeIndex(msg_type)].res = 0xff;
 	}
 
 	return ret;
 }
 
-int CMA_Send_SensorData(int fd, int type, void *data)
+int CMA_Send_SensorData(int fd, int type, void *data, int waitRes)
 {
 	char *id = CMA_Env_Parameter.id;
 	frame_head_t f_head;
@@ -460,9 +466,12 @@ int CMA_Send_SensorData(int fd, int type, void *data)
 		return -1;
 	}
 
-	resData[CMD_GetMsgTypeIndex(type)].res = -1;
-
-	return CMD_WaitStatus_Res(type, 15);
+	if (waitRes) {
+		resData[CMD_GetMsgTypeIndex(type)].res = -1;
+		return CMD_WaitStatus_Res(type, 30);
+	}
+	else
+		return 0;
 }
 
 int CMA_Check_Send_SensorData(int fd, int type)
@@ -544,7 +553,7 @@ int CMA_Check_Send_SensorData(int fd, int type)
 			if (flag == 0) {
 				logcat("CMD Send Data: filename = %s, record_len = %d, i = %d, total = %d\n", filename, record_len, i, total);
 				logcat("CMD Send Data: flag = %d, time: %s", flag, ctime(&t));
-				ret = CMA_Send_SensorData(fd, type, (record + sizeof(time_t)));
+				ret = CMA_Send_SensorData(fd, type, (record + sizeof(time_t)), 1);
 				if (ret < 0)
 					continue;
 				else if (ret == 0xff) {
@@ -660,7 +669,6 @@ static int CMA_Send_RecordingData(int fd, byte type, time_t start, time_t end)
 	char *filename = NULL;
 	int i;
 	time_t t_max, t_min, t;
-	int ret = 0;
 
 	switch (type) {
 	case CMA_MSG_TYPE_DATA_QXENV:
@@ -708,9 +716,8 @@ static int CMA_Send_RecordingData(int fd, byte type, time_t start, time_t end)
 	if (start == end) {
 		memset(&record, 0, record_len);
 		if (File_GetRecordByIndex(filename, &record, record_len, (total - 1)) == record_len) {
-			ret = CMA_Send_SensorData(fd, type, (record + sizeof(time_t)));
-			if (ret == 0xff)
-				logcat("CMD: Send Data reponse OK.\n");
+			CMA_Send_SensorData(fd, type, (record + sizeof(time_t)), 0);
+			usleep(100 * 1000);
 		}
 		return 0;
 	}
@@ -730,9 +737,8 @@ static int CMA_Send_RecordingData(int fd, byte type, time_t start, time_t end)
 		if (File_GetRecordByIndex(filename, &record, record_len, i) == record_len) {
 			memcpy(&t, record, sizeof(time_t));
 			if ((t <= t_max) && (t >= t_min)) {
-				ret = CMA_Send_SensorData(fd, type, (record + sizeof(time_t)));
-				if (ret == 0xff)
-					logcat("CMD: Send Data reponse OK.\n");
+				CMA_Send_SensorData(fd, type, (record + sizeof(time_t)), 0);
+				usleep(100 * 1000);
 			}
 		}
 	}
@@ -1613,6 +1619,7 @@ int CMA_Send_HeartBeat(int fd, char *id)
 {
 	frame_head_t f_head;
 	int cur_time;
+	int ret = 0;
 
 	if (strlen(id) != 17) {
 		logcat("Invalid Device ID.\n");
@@ -1628,7 +1635,16 @@ int CMA_Send_HeartBeat(int fd, char *id)
 	f_head.msg_type = CMA_MSG_TYPE_STATUS_HEART;
 	memcpy(f_head.id, id, 17);
 
+	resData[CMD_GetMsgTypeIndex(CMA_MSG_TYPE_STATUS_HEART)].res = -1;
+
 	if (Commu_SendPacket(fd, &f_head, (byte *)&cur_time) < 0)
+		return -1;
+
+	ret = CMD_WaitStatus_Res(CMA_MSG_TYPE_STATUS_HEART, 30);
+	if (ret == 0xff) {
+		logcat("CMD: Heatbeat Check OK.\n");
+	}
+	else
 		return -1;
 
 	return 0;
@@ -1657,13 +1673,13 @@ int CMA_Send_BasicInfo(int fd, char *id, int wait)
 	if (Device_get_basic_info(&dev) < 0)
 			return -1;
 
-	CMD_Response_data = -1;
+	resData[CMD_GetMsgTypeIndex(CMA_MSG_TYPE_STATUS_INFO)].res = -1;
 
 	if (Commu_SendPacket(fd, &f_head, (byte *)&dev) < 0)
 		return -1;
 
 	if (wait) {
-		ret = CMD_WaitStatus_Res(CMA_MSG_TYPE_STATUS_INFO, 5);
+		ret = CMD_WaitStatus_Res(CMA_MSG_TYPE_STATUS_INFO, 10);
 		if (ret != 0xff) {
 			logcat("CMD: Send Basic Info Error.\n");
 			return -1;
@@ -1696,10 +1712,12 @@ int CMA_Send_WorkStatus(int fd, char *id)
 	if (Device_get_working_status(&status) < 0)
 		return -1;
 
+	resData[CMD_GetMsgTypeIndex(CMA_MSG_TYPE_STATUS_WORK)].res = -1;
+
 	if (Commu_SendPacket(fd, &f_head, (byte *)&status) < 0)
 		return -1;
 
-	ret = CMD_WaitStatus_Res(CMA_MSG_TYPE_STATUS_WORK, 5);
+	ret = CMD_WaitStatus_Res(CMA_MSG_TYPE_STATUS_WORK, 10);
 	if (ret == 0xff) {
 		logcat("CMD: Send work status OK.\n");
 	}

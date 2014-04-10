@@ -120,7 +120,7 @@ typedef struct sensor_device {
 static volatile unsigned int sensor_status = 0xff;
 static volatile unsigned int sensor_status_pre = 0xff;
 
-//#define _DEBUG
+#define _DEBUG
 #ifdef _DEBUG
 static void debug_out(byte *buf, int len)
 {
@@ -311,7 +311,7 @@ static void CMA_GetWind_Data(Data_qixiang_t *data)
 			for (i = 0; i < j; i++)
 				sum += speed[i];
 
-			data->Average_WindSpeed_10min = (float)(sum) / j;
+			data->Average_WindSpeed_10min = (float)(sum) / j / 10.0;
 			data->Average_WindDirection_10min = speed_d[j - 1];
 			data->Max_WindSpeed = max / 10.0;
 			data->Extreme_WindSpeed = max / 10.0;
@@ -590,8 +590,8 @@ void *sensor_qixiang_rs485(void * arg)
 				temp[j] = 0 - temp[j];
 			humi[j] = (buf[6] << 8) | buf[7];
 			pres[j] = (buf[8] << 8) | buf[9];
-			logcat("Sample: i = %d, state = 0x%x\n", i, buf[18]);
-			logcat("Sample: temp = %d, humi = %d, press = %d\n", temp[j], humi[j], pres[j]);
+			logcat("RS485 Sample: i = %d, j = %d\n", i, j);
+			logcat("RS485 Sample: temp = %d, humi = %d, press = %d\n", temp[j], humi[j], pres[j]);
 			j++;
 			data_qixiang_flag++;
 		}
@@ -1246,8 +1246,8 @@ int Sensor_Can_ReadData(usint addr, byte *buf)
 	cmd[7] = crc16 & 0x00ff;
 
 #ifdef _DEBUG
-	logcat("CAN Sensor Send Cmd: ");
-	debug_out(cmd, 8);
+//	logcat("CAN Sensor Send Cmd: ");
+//	debug_out(cmd, 8);
 #endif
 
 	pthread_mutex_lock(&can_mutex);
@@ -1281,11 +1281,11 @@ int Sensor_Can_ReadData(usint addr, byte *buf)
 		pbuf += frame.can_dlc;
 #ifdef _DEBUG
 //		logcat("nbytes = %d, dlc = %d\n", ret, frame.can_dlc);
-		int j;
-		logcat("");
-		for (j = 0; j < 8; j++)
-			logcat_raw("%02x ", frame.data[j]);
-		logcat("\n");
+//		int j;
+//		logcat("");
+//		for (j = 0; j < 8; j++)
+//			logcat_raw("%02x ", frame.data[j]);
+//		logcat_raw("\n");
 #endif
 	}
 
@@ -1389,7 +1389,6 @@ int Sensor_RS485_ReadData(byte addr, byte *buf)
 {
 	byte cmd[13] = {0xa5, 0x5a, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x35, 0x3a, 0xb5};
 //	byte cmd_2[13] = {0xa5, 0x5a, 0x05, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x34, 0xc9, 0xb5};
-	byte rbuf[16];
 	usint crc16 = 0;
 	int timeout = 5;
 	int fd = -1;
@@ -1433,16 +1432,25 @@ int Sensor_RS485_ReadData(byte addr, byte *buf)
 	usleep(250 * 1000);
 
 	system("echo 0 >/sys/devices/platform/gpio-power.0/rs485_direction");
-	usleep(500 * 1000);
-	memset(rbuf, 0, 16);
-	ret = io_readn(fd, rbuf, 13, timeout);
+	usleep(50 * 1000);
+	memset(buf, 0, 16);
+	ret = io_readn(fd, buf, 13, timeout);
 	if (ret <= 0) {
 		logcat("RS485 Sensor 0x%x: read error, ret = %d\n", addr, ret);
 		goto err;
 	}
 
-	crc16 = (rbuf[10] << 8) | rbuf[11];
-	if (crc16 != RTU_CRC(rbuf, 10)) {
+#ifdef _DEBUG
+	logcat("RS485 Sensor 0x%x Receive: ", addr);
+	debug_out(buf, 13);
+#endif
+
+	if (addr == 0x01)
+		crc16 = (buf[11] << 8) | buf[10];
+	else
+		crc16 = (buf[10] << 8) | buf[11];
+	logcat("crc16 = 0x%x, caculate = 0x%0x\n", crc16, RTU_CRC(buf, 10));
+	if (crc16 != RTU_CRC(buf, 10)) {
 		logcat("RS485 Sensor 0x%x: CRC Check error.\n", addr);
 		goto err;
 	}
@@ -1813,11 +1821,10 @@ static void Camera_ImageClear(void)
 	}
 	tm = localtime(&now);
 
-	logcat("ImageClear: Clear Date %s", asctime(tm));
-
 	memset(cmd, 0, 256);
 	sprintf(cmd, "rm -rf %simages-%d%02d%02d*", folder, (tm->tm_year + 1900), (tm->tm_mon + 1), tm->tm_mday);
 	logcat("ImageClear: command shell = %s \n", cmd);
+	logcat("ImageClear: Clear Date %s", asctime(tm));
 	system(cmd);
 
 	return;

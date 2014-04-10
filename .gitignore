@@ -20,6 +20,7 @@
 *.swp
 *.cfg
 
+.autotools
 .cproject
 .project
 .settings/
