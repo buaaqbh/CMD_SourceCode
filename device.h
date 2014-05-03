@@ -41,6 +41,12 @@ extern struct list_head s_head;
 typedef enum {
 	 DEVICE_3G,
 	 DEVICE_WIFI,
+	 DEVICE_CAN,
+	 DEVICE_RS485,
+	 DEVICE_AV,
+	 DEVICE_ZIGBEE_CHIP,
+	 DEVICE_ZIGBEE_12V,
+	 DEVICE_SYSTEM_12V
 } cma_device_t;
 
 extern int rtc_timer(int interval);

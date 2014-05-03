@@ -403,6 +403,7 @@ int main(int argc, char *argv[])
 	pthread_mutex_init(&imgMutex, NULL);
 	readIndex = writeIndex = 0;
 
+#if 1
 	logcat("Connect to server: %s, protocal: %s\n", CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.s_protocal ? "UDP":"TCP");
 	CMA_Env_Parameter.socket_fd = connect_server(CMA_Env_Parameter.cma_ip, CMA_Env_Parameter.cma_port, CMA_Env_Parameter.s_protocal, 10);
 	if (CMA_Env_Parameter.socket_fd < 0) {
@@ -480,6 +481,7 @@ int main(int argc, char *argv[])
 	rtc_alarm_update();
 
 	Camera_NextTimer();
+#endif
 
 	SMS_Init();
 

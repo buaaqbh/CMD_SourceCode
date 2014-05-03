@@ -20,7 +20,7 @@
 #include "types.h"
 #include "file_ops.h"
 
-#define USE_EVDO
+//#define USE_EVDO
 
 #ifdef USE_EVDO
 #define SMS_SERIAL_DEV 		"/dev/ttyUSB1"
@@ -378,7 +378,7 @@ int SMS_DelMessage(int fd, int index)
 
 #define FILE_SMS_PHONE		"/CMD_Data/.sms_phone.txt"
 #define SMS_SUPERPHONE1		"13811187586"
-#define SMS_SUPERPHONE2		"18611171185"
+#define SMS_SUPERPHONE2		"18576420690"
 
 static int SMS_AddPhone(char *phone)
 {
@@ -444,7 +444,8 @@ static int SMS_CheckPhone(char *phone)
 	for (i = 0; i < num; i++) {
 		memset(buf, 0, 16);
 		if (File_GetRecordByIndex(FILE_SMS_PHONE, buf, 16, i) == 16) {
-			if (strcmp(buf, phone) == 0)
+			logcat("buf = %s, phone = %s\n", buf, phone);
+			if (strncmp(buf, phone, 11) == 0)
 				return 0;
 		}
 	}

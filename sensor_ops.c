@@ -25,6 +25,7 @@
 #include "list.h"
 #include "v4l2_lib.h"
 #include "cma_commu.h"
+#include "device.h"
 
 #define RECORD_FILE_WINDSEC		"/CMD_Data/record_windsec.dat"
 #define RECORD_FILE_WINDAVG		"/CMD_Data/record_windavg.dat"
@@ -586,7 +587,7 @@ void *sensor_qixiang_rs485(void * arg)
 		memset(buf, 0, 64);
 		if (Sensor_RS485_ReadData(addr_temp, buf) == 0) {
 			temp[j] = ((buf[4] & 0x7f) << 8) | buf[5];
-			if (buf[6] & 0x80)
+			if (buf[4] & 0x80)
 				temp[j] = 0 - temp[j];
 			humi[j] = (buf[6] << 8) | buf[7];
 			pres[j] = (buf[8] << 8) | buf[9];
@@ -636,6 +637,55 @@ void *sensor_qixiang_rs485(void * arg)
 	return 0;
 }
 
+void *sensor_qixiang_rs485_radiation(void * arg)
+{
+	int i, j;
+	byte buf[64];
+	int radia[6];
+	int   i_threshold = 0;
+	byte addr_radiation = 0x07;
+
+	logcat("Sensor: Get radiation data from rs485 device.\n");
+
+	memset(radia, 0, 6);
+	j = 0;
+
+	for (i = 0; i < 6; i++) {
+		memset(buf, 0, 64);
+		if (Sensor_RS485_ReadData(addr_radiation, buf) == 0) {
+			radia[j] = (buf[4] << 8) | buf[5];
+			logcat("RS485 Sample: i = %d, j = %d, radiation = %d\n", i, j, radia[j]);
+			j++;
+			data_qixiang_flag++;
+		}
+		else
+			continue;
+
+		if ((i == 5) && (j > 0)) {
+			s_data.Radiation_Intensity = sample_avg(radia, j);
+
+			if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 11, &i_threshold) == 0) {
+//				logcat("temp = %f, f_threshold = %f \n", s_data.Air_Temperature, f_threshold);
+				if (s_data.Radiation_Intensity > i_threshold) {
+					s_data.Alerm_Flag |= (1 << 10);
+				}
+			}
+			else {
+				logcat("Sensor Get radiation threshold error.\n");
+			}
+		}
+
+		if (i < 5)
+			sleep(8);
+	}
+
+	if (j > 0) {
+		sensor_status |= (1 << 4);
+	}
+
+	return 0;
+}
+
 static volatile int zigbee_fault_count = 0;
 
 void *sensor_qixiang_zigbee(void * arg)
@@ -673,7 +723,7 @@ int Sensor_Sample_Qixiang(void)
 {
 	int ret = 0;
 	int flag;
-	pthread_t p1 = -1, p2 = -1, p3 = -1;
+	pthread_t p1 = -1, p2 = -1, p3 = -1, p4 = -1;
 	int p1_wait = 0;
 #if 0
 	time_t now, expect;
@@ -698,6 +748,10 @@ int Sensor_Sample_Qixiang(void)
 	ret = pthread_create(&p3, NULL, sensor_qixiang_rs485, NULL);
 	if (ret != 0)
 		logcat("Sensor: can't create rs485 thread.\n");
+
+	ret = pthread_create(&p4, NULL, sensor_qixiang_rs485_radiation, NULL);
+	if (ret != 0)
+		logcat("Sensor: can't create rs485 radiation thread.\n");
 
 	flag = Sensor_Detect_Qixiang();
 	logcat("flag = %d\n", flag);
@@ -779,6 +833,10 @@ int Sensor_Sample_Qixiang(void)
 	if (ret != 0)
 		logcat("CMD: can't join with p3 thread.\n");
 
+	ret = pthread_join(p4, NULL);
+	if (ret != 0)
+		logcat("CMD: can't join with p4 thread.\n");
+
 //	data_qixiang_flag = 1;
 	if (data_qixiang_flag) {
 		record_len = sizeof(struct record_qixiang);
@@ -815,6 +873,7 @@ int Sensor_Sample_TGQingXie(Data_incline_t *data)
 	struct record_incline record;
 	int record_len = 0;
 	float f_threshold = 0.0;
+	byte addr_rs485_angle = 0x06;
 
 	memset(&record, 0, sizeof(struct record_incline));
 	record.tm = rtc_get_time();
@@ -826,43 +885,62 @@ int Sensor_Sample_TGQingXie(Data_incline_t *data)
 	memcpy(data->Component_ID, CMA_Env_Parameter.id, 17);
 	memset(buf, 0, 64);
 	angle_x = angle_y = 0;
-	if (Sensor_Can_ReadData(Sensor_CAN_List_Angle[0].addr, buf) == 0) {
-		angle_x = (buf[6] << 8) | buf[7];
-		angle_y = (buf[8] << 8) | buf[9];
+
+	if (Sensor_RS485_ReadData(addr_rs485_angle, buf) == 0) {
+		angle_x = ((buf[6] & 0x7f) << 8) | buf[7];
+		if (buf[6] & 0x80)
+			angle_x = 0 - angle_x;
+		angle_y = ((buf[8] & 0x7f) << 8) | buf[9];
+		if (buf[8] & 0x80)
+			angle_y = 0 - angle_y;
 		logcat("Sample: angle_x = %d, angle_y = %d\n", angle_x, angle_y);
 
-//		data->Angle_X = asin((angle_x - 1024.0) / 819.0) * 180 / 3.14;
-//		data->Angle_Y = asin((angle_y - 1024.0) / 819.0) * 180 / 3.14;
-		data->Angle_X = angle_x / 100.0;
-		data->Angle_Y = angle_y / 100.0;
-		record_len = sizeof(struct record_incline);
-		memcpy(&record.data, data, sizeof(Data_incline_t));
-		if (File_AppendRecord(RECORD_FILE_TGQXIE, (char *)&record, record_len) < 0) {
-			logcat("CMD: Recording Incline data error.\n");
-		}
-		logcat("Sample Incline Data: \n");
-		logcat("顺线倾斜角： %f \n", data->Angle_X);
-		logcat("横向倾斜角： %f \n", data->Angle_Y);
+		goto Data_valid;
+	}
 
-		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_TGQX_PAR, 4, &f_threshold) == 0) {
-			if (data->Angle_X > f_threshold)
-				data->Alerm_Flag |= (1 << 3);
-		}
-
-		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_TGQX_PAR, 5, &f_threshold) == 0) {
-			if (data->Angle_Y > f_threshold)
-				data->Alerm_Flag |= (1 << 4);
-		}
-
-		ret = 0;
-
-		sensor_status |= (1 << 5);
+	if (Sensor_Can_ReadData(Sensor_CAN_List_Angle[0].addr, buf) == 0) {
+		angle_x = ((buf[6] & 0x7f) << 8) | buf[7];
+		if (buf[6] & 0x80)
+			angle_x = 0 - angle_x;
+		angle_y = ((buf[8] & 0x7f) << 8) | buf[9];
+		if (buf[8] & 0x80)
+			angle_y = 0 - angle_y;
+		logcat("Sample: angle_x = %d, angle_y = %d\n", angle_x, angle_y);
 	}
 	else {
 		logcat("CMD: Incline Sensor is not Online.\n");
 		sensor_status &= (~(1 << 5));
+
+		goto Finish;
 	}
 
+Data_valid:
+	data->Angle_X = angle_x / 100.0;
+	data->Angle_Y = angle_y / 100.0;
+	record_len = sizeof(struct record_incline);
+	memcpy(&record.data, data, sizeof(Data_incline_t));
+	if (File_AppendRecord(RECORD_FILE_TGQXIE, (char *)&record, record_len) < 0) {
+		logcat("CMD: Recording Incline data error.\n");
+	}
+	logcat("Sample Incline Data: \n");
+	logcat("顺线倾斜角： %f \n", data->Angle_X);
+	logcat("横向倾斜角： %f \n", data->Angle_Y);
+
+	if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_TGQX_PAR, 4, &f_threshold) == 0) {
+		if (data->Angle_X > f_threshold)
+			data->Alerm_Flag |= (1 << 3);
+	}
+
+	if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_TGQX_PAR, 5, &f_threshold) == 0) {
+		if (data->Angle_Y > f_threshold)
+			data->Alerm_Flag |= (1 << 4);
+	}
+
+	ret = 0;
+
+	sensor_status |= (1 << 5);
+
+Finish:
 	logcat("CMD: Sample Incline data finished.\n");
 
 	return ret;
@@ -878,6 +956,7 @@ int Sensor_Sample_FuBing(Data_ice_thickness_t *data)
 	int s_num = sizeof(Sensor_CAN_List_PullForce) / sizeof(struct can_device);
 	int i;
 	float f_threshold = 0.0;
+	byte addr_rs485_tension = 0x02;
 
 	memset(&record, 0, sizeof(struct record_fubing));
 	record.tm = rtc_get_time();
@@ -889,18 +968,39 @@ int Sensor_Sample_FuBing(Data_ice_thickness_t *data)
 	memcpy(data->Component_ID, CMA_Env_Parameter.id, 17);
 	force = angle_x = angle_y = wav_cycle = wav_x = wav_y = 0;
 
+	for (i = 0; i < 3; i++) {
+		memset(buf, 0, 64);
+		if (Sensor_RS485_ReadData(addr_rs485_tension, buf) == 0) {
+			force = (buf[4] << 8) | buf[5];
+			angle_x = ((buf[6] & 0x7f) << 8) | buf[7];
+			if (buf[6] & 0x80)
+				angle_x = 0 - angle_x;
+			angle_y = ((buf[8] & 0x7f) << 8) | buf[9];
+			if (buf[8] & 0x80)
+				angle_y = 0 - angle_y;
+
+			logcat("Sample: force = %d, angle_x = %d, angle_y = %d\n", force, angle_x, angle_y);
+
+			ret = 0;
+
+			goto Sample_finish;
+		}
+
+		addr_rs485_tension++;
+	}
+
 	for (i = 0; i < s_num; i++) {
 		memset(buf, 0, 64);
 		if (Sensor_Can_ReadData(Sensor_CAN_List_PullForce[i].addr, buf) == 0) {
 			force = (buf[6] << 8) | buf[7];
-			angle_x = (buf[8] << 8) | buf[9];
-			angle_y = (buf[10] << 8) | buf[11];
-			wav_cycle = (buf[12] << 8) | buf[13];
-			wav_x = (buf[14] << 8) | buf[15];
-			wav_y = (buf[16] << 8) | buf[17];
+			angle_x = ((buf[6] & 0x7f) << 8) | buf[7];
+			if (buf[6] & 0x80)
+				angle_x = 0 - angle_x;
+			angle_y = ((buf[8] & 0x7f) << 8) | buf[9];
+			if (buf[8] & 0x80)
+				angle_y = 0 - angle_y;
 
 			logcat("Sample: force = %d, angle_x = %d, angle_y = %d\n", force, angle_x, angle_y);
-			logcat("Sample: wav_cycle = %d, wav_x = %d, wav_y = %d\n", wav_cycle, wav_x, wav_y);
 
 			ret = 0;
 		}
@@ -908,6 +1008,7 @@ int Sensor_Sample_FuBing(Data_ice_thickness_t *data)
 			logcat("CMD: FuBing %d Sensor is not Online.\n", i);
 	}
 
+Sample_finish:
 	if (ret == 0) {
 		data->Tension = force * 9.8; // force: kgf, Tension: N
 		data->Windage_Yaw_Angle = asin((angle_x - 1024.0) / 819.0) * 180 / 3.14;
@@ -1397,10 +1498,12 @@ int Sensor_RS485_ReadData(byte addr, byte *buf)
 //	logcat("--------- Enter func: %s -----------\n", __func__);
 
 	pthread_mutex_lock(&rs485_mutex);
+	Device_power_ctl(DEVICE_RS485, 1);
 
 	fd = uart_open_dev(UART_PORT_RS485);
 	if (fd == -1) {
 		logcat("RS485 Open port: %s\n", strerror(errno));
+		Device_power_ctl(DEVICE_RS485, 0);
 		pthread_mutex_unlock(&rs485_mutex);
 		return -1;
 	}
@@ -1445,10 +1548,10 @@ int Sensor_RS485_ReadData(byte addr, byte *buf)
 	debug_out(buf, 13);
 #endif
 
-	if (addr == 0x01)
-		crc16 = (buf[11] << 8) | buf[10];
-	else
-		crc16 = (buf[10] << 8) | buf[11];
+//	if (addr == 0x01)
+//		crc16 = (buf[11] << 8) | buf[10];
+//	else
+	crc16 = (buf[10] << 8) | buf[11];
 	logcat("crc16 = 0x%x, caculate = 0x%0x\n", crc16, RTU_CRC(buf, 10));
 	if (crc16 != RTU_CRC(buf, 10)) {
 		logcat("RS485 Sensor 0x%x: CRC Check error.\n", addr);
@@ -1457,12 +1560,14 @@ int Sensor_RS485_ReadData(byte addr, byte *buf)
 
 	close(fd);
 
+	Device_power_ctl(DEVICE_RS485, 0);
 	pthread_mutex_unlock(&rs485_mutex);
 
 	return 0;
 
 err:
 	close(fd);
+	Device_power_ctl(DEVICE_RS485, 0);
 	pthread_mutex_unlock(&rs485_mutex);
 	return -1;
 }

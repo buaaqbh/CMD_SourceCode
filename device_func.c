@@ -120,22 +120,87 @@ int mysystem(char *input, char *output, int maxlen)
 
 	return reslen;
 }
+
+static int canOpenCount = 0;
+static int rs485OpenCount = 0;
+static int avOpenCount = 0;
  
 int Device_power_ctl(cma_device_t dev, int powerOn)
 {
 	switch (dev) {
 	case DEVICE_3G:
-//		if (powerOn)
-//			system("echo 1 > /sys/devices/........");
-//		else
-//			system("echo 0 > /sys/devices/........");
+		if (powerOn)
+			system("echo 1 > /sys/devices/platform/gpio-power.0/power_pcie");
+		else
+			system("echo 0 > /sys/devices/platform/gpio-power.0/power_pcie");
 		break;
 	case DEVICE_WIFI:
-//		if (powerOn)
-//			system("echo 1 > /sys/devices/........");
-//		else
-//			system("echo 0 > /sys/devices/........");
+		if (powerOn)
+			system("echo 1 > /sys/devices/platform/gpio-power.0/power_wifi");
+		else
+			system("echo 0 > /sys/devices/platform/gpio-power.0/power_wifi");
 		break;
+	case DEVICE_CAN:
+		if (powerOn) {
+			++canOpenCount;
+			system("echo 1 > /sys/devices/platform/gpio-power.0/power_can");
+			system("echo 1 > /sys/devices/platform/gpio-power.0/power_can_12v");
+		}
+		else {
+			--canOpenCount;
+			if (canOpenCount == 0) {
+				system("echo 0 > /sys/devices/platform/gpio-power.0/power_can_12v");
+				system("echo 0 > /sys/devices/platform/gpio-power.0/power_can");
+			}
+		}
+		break;
+	case DEVICE_RS485:
+		if (powerOn) {
+			++rs485OpenCount;
+			system("echo 1 > /sys/devices/platform/gpio-power.0/power_rs485");
+			system("echo 1 > /sys/devices/platform/gpio-power.0/power_rs485_12v");
+		}
+		else {
+			--rs485OpenCount;
+			if (rs485OpenCount == 0) {
+				system("echo 0 > /sys/devices/platform/gpio-power.0/power_rs485_12v");
+				system("echo 0 > /sys/devices/platform/gpio-power.0/power_rs485");
+			}
+		}
+		break;
+	case DEVICE_AV:
+		if (powerOn) {
+			++avOpenCount;
+			system("echo 1 > /sys/devices/platform/gpio-power.0/power_av_12v");
+		}
+		else {
+			--avOpenCount;
+			if (avOpenCount == 0) {
+				system("echo 0 > /sys/devices/platform/gpio-power.0/power_av_12v");
+			}
+		}
+		break;
+	case DEVICE_ZIGBEE_CHIP:
+		if (powerOn)
+			system("echo 1 > /sys/devices/platform/gpio-power.0/power_zigbee");
+		else
+			system("echo 0 > /sys/devices/platform/gpio-power.0/power_zigbee");
+		break;
+	case DEVICE_ZIGBEE_12V:
+		if (powerOn)
+			system("echo 1 > /sys/devices/platform/gpio-power.0/power_zigbee_12v");
+		else
+			system("echo 0 > /sys/devices/platform/gpio-power.0/power_zigbee_12v");
+		break;
+	case DEVICE_SYSTEM_12V:
+		if (powerOn)
+			system("echo 1 > /sys/devices/platform/gpio-power.0/power_12v");
+		else
+			system("echo 0 > /sys/devices/platform/gpio-power.0/power_12v");
+		break;
+	default:
+		logcat("Device Power: Invalid Device Type.\n");
+		return -1;
 	}
 	
 	return 0; 
@@ -192,7 +257,7 @@ int Device_wifi_init(void)
 	if (create_wpa_conf() < 0)
 		return -1;
 
-	Device_power_ctl(DEVICE_WIFI, 1);
+//	Device_power_ctl(DEVICE_WIFI, 1);
 	
 	memset(cmd_shell, 0, SHELL_MAX_BUF_LEN);
 	sprintf(cmd_shell, "%s%s", cmd_insmod, WLAN_MODULE);
