@@ -1011,8 +1011,10 @@ int Sensor_Sample_FuBing(Data_ice_thickness_t *data)
 Sample_finish:
 	if (ret == 0) {
 		data->Tension = force * 9.8; // force: kgf, Tension: N
-		data->Windage_Yaw_Angle = asin((angle_x - 1024.0) / 819.0) * 180 / 3.14;
-		data->Deflection_Angle = asin((angle_y - 1024.0) / 819.0) * 180 / 3.14;
+//		data->Windage_Yaw_Angle = asin((angle_x - 1024.0) / 819.0) * 180 / 3.14;
+//		data->Deflection_Angle = asin((angle_y - 1024.0) / 819.0) * 180 / 3.14;
+		data->Windage_Yaw_Angle = angle_x / 100;
+		data->Deflection_Angle = angle_y  / 100;
 		data->Tension_Difference = wav_cycle;
 		data->Reserve1 = wav_x;
 		data->Reserve2 = wav_y;
@@ -1352,8 +1354,10 @@ int Sensor_Can_ReadData(usint addr, byte *buf)
 #endif
 
 	pthread_mutex_lock(&can_mutex);
+	Device_power_ctl(DEVICE_CAN, 1);
 
 	if ((s = can_socket_init(CAN_DEVICE_NAME)) < 0) {
+		Device_power_ctl(DEVICE_CAN, 0);
 		pthread_mutex_unlock(&can_mutex);
 		return -1;
 	}
@@ -1398,12 +1402,14 @@ int Sensor_Can_ReadData(usint addr, byte *buf)
 		goto err;
 	}
 
+	Device_power_ctl(DEVICE_CAN, 0);
 	pthread_mutex_unlock(&can_mutex);
 
 	close(s);
 	return 0;
 
 err:
+	Device_power_ctl(DEVICE_CAN, 0);
 	pthread_mutex_unlock(&can_mutex);
 	close(s);
 	return -1;
@@ -1592,7 +1598,9 @@ int Camera_GetImages(char *ImageName, byte presetting, byte channel)
 		par.Saturation = 50;
 	}
 
+	Device_power_ctl(DEVICE_AV, 1);
 	ret = v4l2_capture_image (ImageName, 720, 576, par.Luminance, par.Contrast, par.Saturation);
+	Device_power_ctl(DEVICE_AV, 0);
 	if (ret < 0) {
 		sensor_status &= (~(1 << 7));
 		logcat("CMD: Capture an Image error.\n");

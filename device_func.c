@@ -145,6 +145,7 @@ int Device_power_ctl(cma_device_t dev, int powerOn)
 			++canOpenCount;
 			system("echo 1 > /sys/devices/platform/gpio-power.0/power_can");
 			system("echo 1 > /sys/devices/platform/gpio-power.0/power_can_12v");
+			usleep(100 * 1000);
 		}
 		else {
 			--canOpenCount;
@@ -159,6 +160,7 @@ int Device_power_ctl(cma_device_t dev, int powerOn)
 			++rs485OpenCount;
 			system("echo 1 > /sys/devices/platform/gpio-power.0/power_rs485");
 			system("echo 1 > /sys/devices/platform/gpio-power.0/power_rs485_12v");
+			usleep(100 * 1000);
 		}
 		else {
 			--rs485OpenCount;
@@ -171,12 +173,15 @@ int Device_power_ctl(cma_device_t dev, int powerOn)
 	case DEVICE_AV:
 		if (powerOn) {
 			++avOpenCount;
+			system("echo 1 > /sys/devices/platform/gpio-power.0/power_rs485");
 			system("echo 1 > /sys/devices/platform/gpio-power.0/power_av_12v");
+			usleep(100 * 1000);
 		}
 		else {
 			--avOpenCount;
 			if (avOpenCount == 0) {
 				system("echo 0 > /sys/devices/platform/gpio-power.0/power_av_12v");
+				system("echo 0 > /sys/devices/platform/gpio-power.0/power_rs485");
 			}
 		}
 		break;
