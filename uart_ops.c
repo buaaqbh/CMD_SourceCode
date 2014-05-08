@@ -17,7 +17,7 @@ int uart_open_dev(char *dev)
 		return -1;		
 	}
 	else {
-		logcat("Serial: Open %s Sucessful.\n", dev);
+//		logcat("Serial: Open %s Sucessful.\n", dev);
 		return fd;
 	}
 }
@@ -36,7 +36,7 @@ void uart_set_speed(int fd, int speed)
 	int   status; 
 	struct termios   Opt;
 
-	logcat("Set bitrate to %d\n", speed);
+//	logcat("Set bitrate to %d\n", speed);
 
 	tcgetattr(fd, &Opt); 
 

@@ -35,10 +35,6 @@ static char *rtc_getDevice_name(struct rtc_alarm_dev *dev)
 		return "TaGan";
 	else if (dev == &sample_dev_2)
 		return "Fubing";
-	else if (dev == &wind_sec)
-		return "Wind Seccond";
-	else if (dev == &wind_avg)
-		return "Wind Average";
 	else if (dev == &camera_dev)
 		return "Camera Caputre";
 	else

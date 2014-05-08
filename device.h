@@ -41,7 +41,8 @@ extern struct list_head s_head;
 typedef enum {
 	 DEVICE_3G,
 	 DEVICE_WIFI,
-	 DEVICE_CAN,
+	 DEVICE_CAN_CHIP,
+	 DEVICE_CAN_12V,
 	 DEVICE_RS485,
 	 DEVICE_AV,
 	 DEVICE_ZIGBEE_CHIP,

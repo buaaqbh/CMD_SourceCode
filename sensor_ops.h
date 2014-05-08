@@ -31,7 +31,6 @@ extern "C" {
 extern pthread_mutex_t can_mutex;
 extern pthread_mutex_t rs485_mutex;
 
-void Sensor_Scanning(void);
 int Sensor_GetData(byte *buf, int type);
 int Camera_SetParameter(Ctl_image_device_t *par);
 int Camera_GetParameter(Ctl_image_device_t *par);
@@ -44,16 +43,13 @@ int Camera_GetImages(char *ImageName, byte presetting, byte channel);
 int Camera_NextTimer(void);
 int Sensor_FaultStatus(void);
 
-int Can_Send(byte *buf, int len);
-int Can_Recv(byte *buf);
-int Sensor_Can_ReadData(usint addr, byte *buf);
-int Sensor_Can_Config(usint addr, usint t);
-
-int Sensor_RS485_ReadData(byte addr, byte *buf);
-
 extern int Sensor_Zigbee_ReadData(byte *buf, int len);
-
-int Sensor_Sample_Qixiang(void);
+extern int RS485_Sample_Qixiang(Data_qixiang_t *sp_data);
+extern int RS485_Sample_TGQingXie(Data_incline_t *data);
+extern int RS485_Sample_FuBing(Data_ice_thickness_t *data);
+extern int CAN_Sample_Qixiang(Data_qixiang_t *sp_data);
+extern int CAN_Sample_TGQingXie(Data_incline_t *data);
+extern int CAN_Sample_FuBing(Data_ice_thickness_t *data);
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -82,7 +82,7 @@ void *socket_receive_func(void * arg)
 	while(1) {
 		if (CMA_Env_Parameter.socket_fd > 0) {
 			memset(rbuf, 0, MAX_DATA_BUFSIZE);
-			logcat("------ CMD: Start to read socket message, fd = %d.\n", CMA_Env_Parameter.socket_fd);
+//			logcat("------ CMD: Start to read socket message, fd = %d.\n", CMA_Env_Parameter.socket_fd);
 			ret = Commu_GetPacket(CMA_Env_Parameter.socket_fd, rbuf, MAX_COMBUF_SIZE, 10);
 			if (ret < 0) {
 				if (ret == -2) {
@@ -97,7 +97,7 @@ void *socket_receive_func(void * arg)
 
 			sem_wait(&semEmpty);
 
-			logcat("--------- writeIndex = %d --------\n", writeIndex);
+//			logcat("--------- writeIndex = %d --------\n", writeIndex);
 			pthread_mutex_lock(&rcvMutex);
 			writeIndex = writeIndex % RCV_BUFFER_NUM;
 			memcpy(rcvBuffer[writeIndex], rbuf, MAX_COMBUF_SIZE);
@@ -119,12 +119,12 @@ void *cmd_server_func(void * arg)
 {
 	byte rbuf[MAX_COMBUF_SIZE];
 
-	logcat("Enter func: %s --\n", __func__);
+//	logcat("Enter func: %s --\n", __func__);
 
 	while(1) {
 		sem_wait(&semFull);
 
-		logcat("----- readIndex = %d --------\n", readIndex);
+//		logcat("----- readIndex = %d --------\n", readIndex);
 		pthread_mutex_lock(&rcvMutex);
 		readIndex = readIndex % RCV_BUFFER_NUM;
 		memset(rbuf, 0, MAX_COMBUF_SIZE);
@@ -364,8 +364,17 @@ int main(int argc, char *argv[])
 	logcat("Device ID: %s, Component ID: %s, Original ID: %d\n",
 			CMA_Env_Parameter.id, CMA_Env_Parameter.c_id, CMA_Env_Parameter.org_id);
 
-	if (Device_can_init() < 0) {
-//		return -1;
+	if (CMA_Env_Parameter.sensor_type == 1) {
+		if (Device_can_init() < 0) {
+			return -1;
+		}
+		else {
+			Device_power_ctl(DEVICE_RS485, 0);
+		}
+	}
+	else {
+		Device_power_ctl(DEVICE_CAN_CHIP, 0);
+		Device_power_ctl(DEVICE_CAN_12V, 0);
 	}
 
 	pthread_mutex_init(&can_mutex, NULL);

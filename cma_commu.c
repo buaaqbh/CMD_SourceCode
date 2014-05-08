@@ -57,7 +57,7 @@ int Commu_GetPacket_Udp(int fd, byte *rbuf, int len, int timeout)
 		return -1;
 	}
 
-	logcat("UDP Socket Begin to receive msg, len = %d\n", len);
+//	logcat("UDP Socket Begin to receive msg, len = %d\n", len);
 	memset(rbuf, 0, len);
 	if (fd == -1) {
 		return -1;

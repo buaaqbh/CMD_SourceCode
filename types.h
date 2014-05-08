@@ -110,7 +110,6 @@ extern "C" {
 
 
 #define 		CMA_MAX_SENSOR_NUM	20
-extern unsigned int Sensor_Online_flag;
 unsigned char 	Sensor_L1_type[CMA_MAX_SENSOR_NUM];
 
 extern char *config_file;
@@ -138,6 +137,7 @@ typedef struct env_data {
 	int 	s_protocal;
 	int 	socket_fd;
 	float	temp;
+	int		sensor_type;
 } env_data_t;
 
 extern env_data_t CMA_Env_Parameter;

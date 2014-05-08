@@ -13,6 +13,7 @@
 #include "io_util.h"
 #include "zigbee_ops.h"
 #include "uart_ops.h"
+#include "device.h"
 
 #define  ZIGBEE_UART_NAME 	"/dev/ttymxc1"
 //#define  ZIGBEE_UART_NAME 	"/dev/ttyS0"
@@ -580,6 +581,9 @@ int Zigbee_Device_Init(void)
 	byte rbuf[8] = {0};
 	int fd;
 
+	Device_power_ctl(DEVICE_ZIGBEE_CHIP, 1);
+	Device_power_ctl(DEVICE_ZIGBEE_12V, 0);
+
 	if ((fd = Zigbee_Get_Device(ZIGBEE_UART_SPEED)) < 0)
 		return -1;
 
@@ -617,6 +621,8 @@ int Zigbee_Device_Init(void)
 		return -1;
 
 	Zigbee_Release_Device(fd);
+
+	Device_power_ctl(DEVICE_ZIGBEE_12V, 1);
 
 	return 0;
 }

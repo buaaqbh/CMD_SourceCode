@@ -75,6 +75,9 @@ int Device_Env_init(void)
 	else if (memcmp(s_proto, "tcp", 3) == 0)
 		CMA_Env_Parameter.s_protocal = 0;
 
+	CMA_Env_Parameter.sensor_type = 0;
+	CMA_Env_Parameter.sensor_type = iniparser_getint(ini, "Sensor:type", 0);
+
 	iniparser_freedict(ini);
 	return 0;
 
@@ -120,10 +123,6 @@ int mysystem(char *input, char *output, int maxlen)
 
 	return reslen;
 }
-
-static int canOpenCount = 0;
-static int rs485OpenCount = 0;
-static int avOpenCount = 0;
  
 int Device_power_ctl(cma_device_t dev, int powerOn)
 {
@@ -140,49 +139,47 @@ int Device_power_ctl(cma_device_t dev, int powerOn)
 		else
 			system("echo 0 > /sys/devices/platform/gpio-power.0/power_wifi");
 		break;
-	case DEVICE_CAN:
+	case DEVICE_CAN_CHIP:
 		if (powerOn) {
-			++canOpenCount;
 			system("echo 1 > /sys/devices/platform/gpio-power.0/power_can");
-			system("echo 1 > /sys/devices/platform/gpio-power.0/power_can_12v");
-			usleep(100 * 1000);
+			usleep(200 * 1000);
 		}
 		else {
-			--canOpenCount;
-			if (canOpenCount == 0) {
-				system("echo 0 > /sys/devices/platform/gpio-power.0/power_can_12v");
-				system("echo 0 > /sys/devices/platform/gpio-power.0/power_can");
-			}
+			system("echo 0 > /sys/devices/platform/gpio-power.0/power_can");
+		}
+		break;
+	case DEVICE_CAN_12V:
+		if (powerOn) {
+			system("echo 1 > /sys/devices/platform/gpio-power.0/power_can_12v");
+//			usleep(500 * 1000);
+//			sleep(1);
+		}
+		else {
+			system("echo 0 > /sys/devices/platform/gpio-power.0/power_can_12v");
 		}
 		break;
 	case DEVICE_RS485:
 		if (powerOn) {
-			++rs485OpenCount;
 			system("echo 1 > /sys/devices/platform/gpio-power.0/power_rs485");
 			system("echo 1 > /sys/devices/platform/gpio-power.0/power_rs485_12v");
-			usleep(100 * 1000);
+//			usleep(500 * 1000);
+//			sleep(1);
 		}
 		else {
-			--rs485OpenCount;
-			if (rs485OpenCount == 0) {
-				system("echo 0 > /sys/devices/platform/gpio-power.0/power_rs485_12v");
-				system("echo 0 > /sys/devices/platform/gpio-power.0/power_rs485");
-			}
+			system("echo 0 > /sys/devices/platform/gpio-power.0/power_rs485_12v");
+			system("echo 0 > /sys/devices/platform/gpio-power.0/power_rs485");
 		}
 		break;
 	case DEVICE_AV:
 		if (powerOn) {
-			++avOpenCount;
 			system("echo 1 > /sys/devices/platform/gpio-power.0/power_rs485");
 			system("echo 1 > /sys/devices/platform/gpio-power.0/power_av_12v");
-			usleep(100 * 1000);
+//			usleep(100 * 1000);
+//			sleep(2);
 		}
 		else {
-			--avOpenCount;
-			if (avOpenCount == 0) {
-				system("echo 0 > /sys/devices/platform/gpio-power.0/power_av_12v");
-				system("echo 0 > /sys/devices/platform/gpio-power.0/power_rs485");
-			}
+			system("echo 0 > /sys/devices/platform/gpio-power.0/power_av_12v");
+			system("echo 0 > /sys/devices/platform/gpio-power.0/power_rs485");
 		}
 		break;
 	case DEVICE_ZIGBEE_CHIP:
@@ -364,6 +361,8 @@ int Device_can_init(void)
 	int bitrate = 0;
 	int err;
 	
+	Device_power_ctl(DEVICE_CAN_CHIP, 1);
+
 	ini = iniparser_load(config_file);
 	if (ini==NULL) {
 		logcat("cannot parse file: %s\n", config_file);
