@@ -310,6 +310,8 @@ int main(int argc, char *argv[])
 	int ret;
 	int i;
 
+	logcat("CMA Online Sofeware, Version 1.02.\n");
+
 	config_file = CMA_CONFIG_FILE;
 
 	for (;;) {

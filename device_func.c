@@ -123,6 +123,8 @@ int mysystem(char *input, char *output, int maxlen)
 
 	return reslen;
 }
+
+static volatile int av_power_state = 0;
  
 int Device_power_ctl(cma_device_t dev, int powerOn)
 {
@@ -162,7 +164,7 @@ int Device_power_ctl(cma_device_t dev, int powerOn)
 		if (powerOn) {
 			system("echo 1 > /sys/devices/platform/gpio-power.0/power_rs485");
 			system("echo 1 > /sys/devices/platform/gpio-power.0/power_rs485_12v");
-//			usleep(500 * 1000);
+			usleep(500 * 1000);
 //			sleep(1);
 		}
 		else {
@@ -174,12 +176,18 @@ int Device_power_ctl(cma_device_t dev, int powerOn)
 		if (powerOn) {
 			system("echo 1 > /sys/devices/platform/gpio-power.0/power_rs485");
 			system("echo 1 > /sys/devices/platform/gpio-power.0/power_av_12v");
+			if (av_power_state == 0) {
+				logcat("AV_VIDEO: Wait for Camera Init Complete ...... \n");
+				sleep(20);
+			}
+			av_power_state = 1;
 //			usleep(100 * 1000);
 //			sleep(2);
 		}
 		else {
 			system("echo 0 > /sys/devices/platform/gpio-power.0/power_av_12v");
 			system("echo 0 > /sys/devices/platform/gpio-power.0/power_rs485");
+			av_power_state = 0;
 		}
 		break;
 	case DEVICE_ZIGBEE_CHIP:

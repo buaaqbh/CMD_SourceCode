@@ -485,7 +485,7 @@ int RS485_Sample_FuBing(Data_ice_thickness_t *data)
 	int force, angle_x, angle_y, wav_cycle, wav_x, wav_y;
 	struct record_fubing record;
 	int record_len = 0;
-	int i;
+	int i, j;
 	float f_threshold = 0.0;
 	byte addr_rs485_tension = 0x02;
 
@@ -501,6 +501,7 @@ int RS485_Sample_FuBing(Data_ice_thickness_t *data)
 
 	for (i = 0; i < 3; i++) {
 		memset(buf, 0, 64);
+		for (j = 0; j < 3; j++) {
 		if (Sensor_RS485_ReadData(addr_rs485_tension, buf) == 0) {
 			force = (buf[4] << 8) | buf[5];
 			angle_x = ((buf[6] & 0x7f) << 8) | buf[7];
@@ -515,6 +516,8 @@ int RS485_Sample_FuBing(Data_ice_thickness_t *data)
 			ret = 0;
 
 			goto Sample_finish;
+		}
+		sleep(5);
 		}
 
 		addr_rs485_tension++;

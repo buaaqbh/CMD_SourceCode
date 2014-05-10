@@ -57,7 +57,7 @@ int Camera_SendCmd(byte *cmd, int len)
 	byte cmd_stop[7] = {0xff, 0x01, 0x00, 0x00, 0x00, 0x00, 0x01};
 
 	system("echo 1 > /sys/devices/platform/gpio-power.0/power_rs485");
-	usleep(100 * 1000);
+	usleep(500 * 1000);
 
 	fd = uart_open_dev(UART_PORT_RS485);
 	if (fd == -1) {
