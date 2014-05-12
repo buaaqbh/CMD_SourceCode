@@ -238,13 +238,13 @@ void *Sensor_Sample_loop_TGQingXie(void * arg)
 
 	memset(data_buf, 0, MAX_DATA_BUFSIZE);
 	if (Sensor_GetData(data_buf, CMA_MSG_TYPE_DATA_TGQXIE) < 0) {
-		logcat("CMD: Sample Env Data error.\n");
+		logcat("CMD: Sample Angle Data error.\n");
 	}
 	else if (CMA_Env_Parameter.socket_fd > 0) {
 //		ret = CMA_Send_SensorData(CMA_Env_Parameter.socket_fd, CMA_MSG_TYPE_DATA_TGQXIE, data_buf);
 		ret = CMA_Check_Send_SensorData(CMA_Env_Parameter.socket_fd, CMA_MSG_TYPE_DATA_TGQXIE);
 		if (ret < 0) {
-			logcat("CMD: Socket Send Env Data error.\n");
+			logcat("CMD: Socket Send Angle Data error.\n");
 		}
 	}
 
@@ -264,13 +264,13 @@ void *Sensor_Sample_loop_FuBing(void * arg)
 
 	memset(data_buf, 0, MAX_DATA_BUFSIZE);
 	if (Sensor_GetData(data_buf, CMA_MSG_TYPE_DATA_FUBING) < 0) {
-		logcat("CMD: Sample Env Data error.\n");
+		logcat("CMD: Sample Tension Data error.\n");
 	}
 	else if (CMA_Env_Parameter.socket_fd > 0) {
 //		ret = CMA_Send_SensorData(CMA_Env_Parameter.socket_fd, CMA_MSG_TYPE_DATA_FUBING, data_buf);
 		ret = CMA_Check_Send_SensorData(CMA_Env_Parameter.socket_fd, CMA_MSG_TYPE_DATA_FUBING);
 		if (ret < 0) {
-			logcat("CMD: Socket Send Env Data error.\n");
+			logcat("CMD: Socket Send Tension Data error.\n");
 		}
 	}
 
@@ -304,7 +304,7 @@ int main(int argc, char *argv[])
 	int ret;
 	int i;
 
-	logcat("CMA Online Sofeware, Version 1.06.\n");
+	logcat("CMA Online Sofeware, Version 1.07.\n");
 
 	config_file = CMA_CONFIG_FILE;
 

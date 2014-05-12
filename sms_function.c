@@ -191,7 +191,7 @@ int SMS_ReadMessage(int fd, int index, char *data, char *phone)
 	int retry = 5;
 
 SMS_Retry:
-	logcat("SMS Start to read Message, index = %d, retry = %d\n", index, retry);
+//	logcat("SMS Start to read Message, index = %d, retry = %d\n", index, retry);
 	memset(cmd, 0, 256);
 #ifdef USE_EVDO
 	sprintf(cmd, "at^hcmgr=%d\r", index);
@@ -199,8 +199,10 @@ SMS_Retry:
 	sprintf(cmd, "at+cmgr=%d\r", index);
 #endif
 
-	if (Modem_SendCmd(fd, cmd, 5) < 0)
+	if (Modem_SendCmd(fd, cmd, 5) < 0) {
+		logcat("SMS Send CMD error.\n");
 		return -1;
+	}
 
 	usleep(400 * 1000);
 	nread = 0;
@@ -241,7 +243,7 @@ SMS_Retry:
 #ifdef USE_EVDO
 		if (strncmp(p, "^HCMGR", 6) == 0) {
 #else
-		if (strlen(p) > 0) {
+		if (memcmp(p, "+CMGR", 5) == 0) {
 #endif
 //			logcat("strsep: %s \n", p);
 			break;
@@ -335,7 +337,7 @@ int SMS_SendMessage(int fd, char *phone, char *msg)
 		return -1;
 
 	usleep(500 * 1000);
-	if (Modem_WaitResponse(fd, "OK", 20) < 0) {
+	if (Modem_WaitResponse(fd, "OK", 30) < 0) {
 		logcat("SMS Send Message error.\n");
 		return -1;
 	}
@@ -495,7 +497,7 @@ int SMS_CMDProcess(char *data, char *phone)
 	else if (memcmp(p_cmd, COMMAND_RESET, strlen(COMMAND_RESET)) == 0) {
 		logcat("SMS: Reset system.\n");
 //		Device_reset(0);
-		system("/sbin/reboot -d 10 &");
+		system("/sbin/reboot -d 30 &");
 	}
 	else if (memcmp(p_cmd, COMMAND_SETID, strlen(COMMAND_SETID)) == 0) {
 		logcat("SMS: Set Device ID to: %s\n", p_data);
@@ -510,6 +512,7 @@ int SMS_CMDProcess(char *data, char *phone)
 		logcat("SMS: Add Control Phone: %s\n", p_data);
 		if ((strcmp(phone, SMS_SUPERPHONE1) != 0) && (strcmp(phone, SMS_SUPERPHONE2) != 0)) {
 			logcat("SMS: phone %s isn't super user.\n", phone);
+			return -1;
 		}
 
 		if (SMS_AddPhone(p_data) < 0)
@@ -519,6 +522,7 @@ int SMS_CMDProcess(char *data, char *phone)
 		logcat("SMS: Del Control Phone: %s\n", p_data);
 		if ((strcmp(phone, SMS_SUPERPHONE1) != 0) && (strcmp(phone, SMS_SUPERPHONE2) != 0)) {
 			logcat("SMS: phone %s isn't super user.\n", phone);
+			return -1;
 		}
 
 		if (SMS_DelPhone(p_data) < 0)
@@ -595,6 +599,55 @@ static void SMS_SetFunction(int fd)
 
 	return;
 }
+
+#include <dirent.h>
+
+#define BUF_SIZE 			1024
+static volatile int pid_3g = -1;
+
+static int getPidByName(char* task_name)
+{
+	DIR *dir;
+	struct dirent *ptr;
+	FILE *fp;
+	char filepath[64];
+	char cur_task_name[64];
+	char buf[BUF_SIZE];
+	int pid_num = -1;
+
+	dir = opendir("/proc");
+	if (NULL != dir){
+    	while ((ptr = readdir(dir)) != NULL) {
+    		//如果读取到的是"."或者".."则跳过，读取到的不是文件夹名字也跳过
+    		if ((strcmp(ptr->d_name, ".") == 0) || (strcmp(ptr->d_name, "..") == 0))
+    			continue;
+    		if (DT_DIR != ptr->d_type)
+    			continue;
+
+    		sprintf(filepath, "/proc/%s/status", ptr->d_name);//生成要读取的文件的路径
+    		fp = fopen(filepath, "r");//打开文件
+    		if (NULL != fp) {
+    			if( fgets(buf, BUF_SIZE-1, fp)== NULL ) {
+    				fclose(fp);
+    				continue;
+    			}
+    			sscanf(buf, "%*s %s", cur_task_name);
+
+    			//如果文件内容满足要求则打印路径的名字（即进程的PID）
+    			if (!strcmp(task_name, cur_task_name)) {
+//    				logcat("PID:  %s\n", ptr->d_name);
+    				pid_num = atoi(ptr->d_name);
+    			}
+    			fclose(fp);
+            }
+
+    	}
+    	closedir(dir);//关闭路径
+	}
+
+	return pid_num;
+}
+
 void *SMS_WaitNewMessage(void *arg)
 {
 	char rbuf[512];
@@ -604,6 +657,7 @@ void *SMS_WaitNewMessage(void *arg)
 	char *result[5] = { NULL };
 	int i = 0, num = 0;
 	int nread;
+	int pid = -1;
 
 	pthread_detach(pthread_self());
 
@@ -613,12 +667,27 @@ void *SMS_WaitNewMessage(void *arg)
 		if (fd < 0) {
 			sleep(10);
 			fd = Modem_Init();
-			SMS_SetFunction(fd);
+			if (fd < 0)
+				continue;
+			else {
+				sleep(20);
+				SMS_SetFunction(fd);
+			}
+		}
+
+		pid = getPidByName("pppd");
+		if (pid_3g != pid) {
+			pid_3g = pid;
+			close(fd);
+			fd = -1;
 			continue;
 		}
+
 		memset(rbuf, 0, 512);
+//		logcat("Start to Read Modem Uart: \n");
 		nread = read(fd, rbuf, 512);
-		if (nread < 0) {
+//		logcat("Modem Receive %d bytes\n", nread);
+		if (nread <= 0) {
 			logcat("Modem read uart: %s\n", strerror(errno));
 			close(fd);
 			fd = -1;
