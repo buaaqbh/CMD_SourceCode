@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
+#include <pthread.h>
 #include "camera_control.h"
 #include "uart_ops.h"
 #include "io_util.h"
@@ -18,6 +19,9 @@
 /* PELCO-D Protocol */
 
 #define  ACTION_INTERVAL	(800*1000)
+
+extern pthread_mutex_t rs485_mutex;
+volatile int av_rs485_used = 0;
 
 //#define _DEBUG
 
@@ -56,19 +60,19 @@ int Camera_SendCmd(byte *cmd, int len)
 	int err = 0;
 	byte cmd_stop[7] = {0xff, 0x01, 0x00, 0x00, 0x00, 0x00, 0x01};
 
-	system("echo 1 > /sys/devices/platform/gpio-power.0/power_rs485");
-	usleep(500 * 1000);
+	pthread_mutex_lock(&rs485_mutex);
+	av_rs485_used = 1;
 
 	fd = uart_open_dev(UART_PORT_RS485);
 	if (fd == -1) {
 		logcat("serial port open error: %s\n", strerror(errno));
-		system("echo 0 > /sys/devices/platform/gpio-power.0/power_rs485");
+		pthread_mutex_unlock(&rs485_mutex);
 		return -1;
 	}
 	uart_set_speed(fd, UART_RS485_SPEDD);
 	if(uart_set_parity(fd, 8, 1, 'N') == -1) {
 		logcat ("Set Parity Error\n");
-		system("echo 0 > /sys/devices/platform/gpio-power.0/power_rs485");
+		pthread_mutex_unlock(&rs485_mutex);
 		return -1;
 	}
 
@@ -79,7 +83,7 @@ int Camera_SendCmd(byte *cmd, int len)
 		logcat("RS485: Send Command Sucess.\n");
 	else {
 		logcat("write error, ret = %d\n", err);
-		system("echo 0 > /sys/devices/platform/gpio-power.0/power_rs485");
+		pthread_mutex_unlock(&rs485_mutex);
 		return -1;
 	}
 
@@ -92,7 +96,7 @@ int Camera_SendCmd(byte *cmd, int len)
             logcat("RS485: Send Stop Command Sucess.\n");
     else {
             logcat("write error, ret = %d\n", err);
-            system("echo 0 > /sys/devices/platform/gpio-power.0/power_rs485");
+            pthread_mutex_unlock(&rs485_mutex);
             return -1;
     }
 
@@ -100,7 +104,7 @@ int Camera_SendCmd(byte *cmd, int len)
 	print_message(cmd, len);
 #endif
 
-	system("echo 0 > /sys/devices/platform/gpio-power.0/power_rs485");
+	pthread_mutex_unlock(&rs485_mutex);
 
 	return 0;
 }

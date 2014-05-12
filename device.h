@@ -37,6 +37,7 @@ extern "C" {
 #define WLAN_DEVICE	"wlan0"
 
 extern struct list_head s_head;
+extern pthread_mutex_t av_mutex;
 
 typedef enum {
 	 DEVICE_3G,
@@ -44,6 +45,8 @@ typedef enum {
 	 DEVICE_CAN_CHIP,
 	 DEVICE_CAN_12V,
 	 DEVICE_RS485,
+	 DEVICE_RS485_CHIP,
+	 DEVICE_RS485_RESET,
 	 DEVICE_AV,
 	 DEVICE_ZIGBEE_CHIP,
 	 DEVICE_ZIGBEE_12V,

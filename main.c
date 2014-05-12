@@ -224,8 +224,6 @@ void *Sensor_Sample_loop_QiXiang(void * arg)
 
 	system_sleep_enable(1);
 
-	alarm(2);
-
 	return 0;
 }
 
@@ -252,8 +250,6 @@ void *Sensor_Sample_loop_TGQingXie(void * arg)
 
 	system_sleep_enable(1);
 
-	alarm(2);
-
 	return 0;
 }
 
@@ -279,8 +275,6 @@ void *Sensor_Sample_loop_FuBing(void * arg)
 	}
 
 	system_sleep_enable(1);
-
-	alarm(2);
 
 	return 0;
 }
@@ -310,7 +304,7 @@ int main(int argc, char *argv[])
 	int ret;
 	int i;
 
-	logcat("CMA Online Sofeware, Version 1.02.\n");
+	logcat("CMA Online Sofeware, Version 1.06.\n");
 
 	config_file = CMA_CONFIG_FILE;
 
@@ -375,6 +369,7 @@ int main(int argc, char *argv[])
 		}
 	}
 	else {
+		Device_power_ctl(DEVICE_RS485_CHIP, 1);
 		Device_power_ctl(DEVICE_CAN_CHIP, 0);
 		Device_power_ctl(DEVICE_CAN_12V, 0);
 	}
@@ -382,13 +377,16 @@ int main(int argc, char *argv[])
 	pthread_mutex_init(&can_mutex, NULL);
 	pthread_mutex_init(&rs485_mutex, NULL);
 	pthread_mutex_init(&com_mutex, NULL);
+	pthread_mutex_init(&av_mutex, NULL);
 
 	pthread_spin_init(&spinlock, 0);
 
+/*
 	if (signal(SIGALRM, enter_sleep) == SIG_ERR) {
 		logcat("CMD: sinal init error.\n");
 		return -1;
 	}
+*/
 
 	if (Zigbee_Device_Init() < 0) {
 		logcat("Zigbee Device Init Error.\n");

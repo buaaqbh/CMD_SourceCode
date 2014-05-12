@@ -18,6 +18,7 @@
 #include <libsocketcan.h>
 #include <iconv.h>
 #include <pthread.h>
+#include <signal.h>
 #include "types.h"
 #include "device.h"
 #include "iniparser.h"
@@ -26,6 +27,7 @@
 #include "file_ops.h"
 
 env_data_t CMA_Env_Parameter;
+pthread_mutex_t av_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 int Device_Env_init(void)
 {
@@ -125,7 +127,29 @@ int mysystem(char *input, char *output, int maxlen)
 }
 
 static volatile int av_power_state = 0;
- 
+
+static void set_timer(int sec)
+{
+	struct itimerval itv, oldtv;
+	itv.it_interval.tv_sec = 0;
+	itv.it_interval.tv_usec = 0;
+	itv.it_value.tv_sec = sec;
+	itv.it_value.tv_usec = 0;
+	setitimer(ITIMER_REAL, &itv, &oldtv);
+}
+
+void av_power_off(int arg)
+{
+	pthread_mutex_lock(&av_mutex);
+	logcat("----------- AV Power off, state = %d -----------------\n", av_power_state);
+	av_power_state = 0;
+	if (av_power_state == 0) {
+		system("echo 0 > /sys/devices/platform/gpio-power.0/power_av_12v");
+//		system("echo 0 > /sys/devices/platform/gpio-power.0/power_rs485");
+	}
+	pthread_mutex_unlock(&av_mutex);
+}
+
 int Device_power_ctl(cma_device_t dev, int powerOn)
 {
 	switch (dev) {
@@ -162,32 +186,53 @@ int Device_power_ctl(cma_device_t dev, int powerOn)
 		break;
 	case DEVICE_RS485:
 		if (powerOn) {
-			system("echo 1 > /sys/devices/platform/gpio-power.0/power_rs485");
+//			system("echo 1 > /sys/devices/platform/gpio-power.0/power_rs485");
 			system("echo 1 > /sys/devices/platform/gpio-power.0/power_rs485_12v");
 			usleep(500 * 1000);
 //			sleep(1);
 		}
 		else {
 			system("echo 0 > /sys/devices/platform/gpio-power.0/power_rs485_12v");
+//			system("echo 0 > /sys/devices/platform/gpio-power.0/power_rs485");
+		}
+		break;
+	case DEVICE_RS485_CHIP:
+		if (powerOn) {
+			system("echo 1 > /sys/devices/platform/gpio-power.0/power_rs485");
+			usleep(500 * 1000);
+		}
+		else {
 			system("echo 0 > /sys/devices/platform/gpio-power.0/power_rs485");
 		}
 		break;
+	case DEVICE_RS485_RESET:
+		system("echo 90 > /sys/devices/platform/gpio-power.0/power_rs485_12v");
+		sleep(5);
+		break;
 	case DEVICE_AV:
+		signal(SIGALRM, av_power_off);
 		if (powerOn) {
-			system("echo 1 > /sys/devices/platform/gpio-power.0/power_rs485");
+//			alarm(0);
+			set_timer(0);
+			pthread_mutex_lock(&av_mutex);
+//			system("echo 1 > /sys/devices/platform/gpio-power.0/power_rs485");
+//			sleep(1);
 			system("echo 1 > /sys/devices/platform/gpio-power.0/power_av_12v");
 			if (av_power_state == 0) {
-				logcat("AV_VIDEO: Wait for Camera Init Complete ...... \n");
+				++av_power_state;
+				pthread_mutex_unlock(&av_mutex);
+				logcat("AV_VIDEO: Wait for Camera Init Complete, state = %d ...... \n", av_power_state);
 				sleep(20);
 			}
-			av_power_state = 1;
-//			usleep(100 * 1000);
-//			sleep(2);
+			else {
+				++av_power_state;
+				pthread_mutex_unlock(&av_mutex);
+			}
+
+			set_timer(90);
 		}
 		else {
-			system("echo 0 > /sys/devices/platform/gpio-power.0/power_av_12v");
-			system("echo 0 > /sys/devices/platform/gpio-power.0/power_rs485");
-			av_power_state = 0;
+			set_timer(30);
 		}
 		break;
 	case DEVICE_ZIGBEE_CHIP:
@@ -370,6 +415,10 @@ int Device_can_init(void)
 	int err;
 	
 	Device_power_ctl(DEVICE_CAN_CHIP, 1);
+
+	usleep(400 * 1000);
+
+	system("ifconfig can0 down");
 
 	ini = iniparser_load(config_file);
 	if (ini==NULL) {

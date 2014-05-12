@@ -366,9 +366,8 @@ int Camera_GetImages(char *ImageName, byte presetting, byte channel)
 		par.Saturation = 50;
 	}
 
-	Device_power_ctl(DEVICE_AV, 1);
 	ret = v4l2_capture_image (ImageName, 720, 576, par.Luminance, par.Contrast, par.Saturation);
-	Device_power_ctl(DEVICE_AV, 0);
+	Camera_PowerOff(CAMERA_DEVICE_ADDR);
 	if (ret < 0) {
 		sensor_status &= (~(1 << 7));
 		logcat("CMD: Capture an Image error.\n");
@@ -761,7 +760,10 @@ int Camera_Control(byte action, byte presetting, byte channel)
 
 	logcat("Camera Control: action = %d, preSetting = %d\n", action, presetting);
 
-	pthread_mutex_lock(&rs485_mutex);
+	Device_power_ctl(DEVICE_AV, 1);
+	sleep(1);
+
+//	pthread_mutex_lock(&rs485_mutex);
 
 	switch (action) {
 	case CAMERA_ACTION_POWERON:
@@ -799,7 +801,9 @@ int Camera_Control(byte action, byte presetting, byte channel)
 		break;
 	}
 
-	pthread_mutex_unlock(&rs485_mutex);
+//	pthread_mutex_unlock(&rs485_mutex);
+
+	Device_power_ctl(DEVICE_AV, 0);
 
 	return ret;
 }

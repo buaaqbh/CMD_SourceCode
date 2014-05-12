@@ -424,13 +424,11 @@ void *sensor_qixiang_can_temp(void * arg)
 			j++;
 			data_qixiang_flag++;
 		}
-		else
-			continue;
 
 		if ((i == 5) && (j > 0)) {
 			pdata->Air_Temperature = (float)sample_avg(temp, j) / 10;
 			pdata->Humidity = (usint)sample_avg(humi, j);
-			pdata->Air_Pressure = (float)sample_avg(pres, 6);
+			pdata->Air_Pressure = (float)sample_avg(pres, j);
 			CMA_Env_Parameter.temp = pdata->Air_Temperature;
 
 			if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 6, &f_threshold) == 0) {
@@ -487,8 +485,6 @@ void *sensor_qixiang_can_radiation(void * arg)
 			j++;
 			data_qixiang_flag++;
 		}
-		else
-			continue;
 
 		if ((i == 5) && (j > 0)) {
 			pdata->Radiation_Intensity = sample_avg(radia, j);

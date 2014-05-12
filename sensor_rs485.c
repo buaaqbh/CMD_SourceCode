@@ -27,6 +27,7 @@ extern pthread_mutex_t rs485_mutex;
 extern unsigned int sensor_status;
 
 extern unsigned int data_qixiang_flag;
+extern int av_rs485_used;
 
 extern int sample_avg(int *data, int size);
 extern int Sensor_Get_AlarmValue(byte type, byte index, void *value);
@@ -53,12 +54,14 @@ int Sensor_RS485_ReadData(byte addr, byte *buf)
 //	logcat("--------- Enter func: %s -----------\n", __func__);
 
 	pthread_mutex_lock(&rs485_mutex);
-	Device_power_ctl(DEVICE_RS485, 1);
+	if (av_rs485_used == 1) {
+		av_rs485_used = 0;
+		Device_power_ctl(DEVICE_RS485_RESET, 1);
+	}
 
 	fd = uart_open_dev(UART_PORT_RS485);
 	if (fd == -1) {
 		logcat("RS485 Open port: %s\n", strerror(errno));
-		Device_power_ctl(DEVICE_RS485, 0);
 		pthread_mutex_unlock(&rs485_mutex);
 		return -1;
 	}
@@ -112,14 +115,12 @@ int Sensor_RS485_ReadData(byte addr, byte *buf)
 
 	close(fd);
 
-	Device_power_ctl(DEVICE_RS485, 0);
 	pthread_mutex_unlock(&rs485_mutex);
 
 	return 0;
 
 err:
 	close(fd);
-	Device_power_ctl(DEVICE_RS485, 0);
 	pthread_mutex_unlock(&rs485_mutex);
 	return -1;
 }
@@ -156,13 +157,11 @@ void *sensor_qixiang_rs485_temp(void * arg)
 			j++;
 			data_qixiang_flag++;
 		}
-		else
-			continue;
 
 		if ((i == 5) && (j > 0)) {
 			pdata->Air_Temperature = (float)sample_avg(temp, j) / 10;
 			pdata->Humidity = (usint)sample_avg(humi, j);
-			pdata->Air_Pressure = (float)sample_avg(pres, 6);
+			pdata->Air_Pressure = (float)sample_avg(pres, j);
 			CMA_Env_Parameter.temp = pdata->Air_Temperature;
 
 			logcat("Temperature: i = %d, j = %d, %f, %d, %f\n", i, j, pdata->Air_Temperature,
@@ -222,8 +221,6 @@ void *sensor_qixiang_rs485_radiation(void * arg)
 			j++;
 			data_qixiang_flag++;
 		}
-		else
-			continue;
 
 		if ((i == 5) && (j > 0)) {
 			pdata->Radiation_Intensity = sample_avg(radia, j);
@@ -456,6 +453,7 @@ int RS485_Sample_TGQingXie(Data_incline_t *data)
 	logcat("Sample Incline Data: \n");
 	logcat("顺线倾斜角： %f \n", data->Angle_X);
 	logcat("横向倾斜角： %f \n", data->Angle_Y);
+	logcat("Alarm： 0x%x \n", data->Alerm_Flag);
 
 	if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_TGQX_PAR, 4, &f_threshold) == 0) {
 		if (data->Angle_X > f_threshold)
@@ -565,6 +563,7 @@ Sample_finish:
 		logcat("不均衡张力差： %f \n", data->Tension_Difference);
 		logcat("绝缘子串风偏角： %f \n", data->Windage_Yaw_Angle);
 		logcat("绝缘子串倾斜角： %f \n", data->Deflection_Angle);
+		logcat("Alarm： 0x%x \n", data->Alerm_Flag);
 
 		sensor_status |= (1 << 6);
 	}
