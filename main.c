@@ -304,7 +304,7 @@ int main(int argc, char *argv[])
 	int ret;
 	int i;
 
-	logcat("CMA Online Sofeware, Version 1.07.\n");
+	logcat("CMA Online Sofeware, Version 1.08, build at %s, %s.\n", __TIME__, __DATE__);
 
 	config_file = CMA_CONFIG_FILE;
 
@@ -369,7 +369,6 @@ int main(int argc, char *argv[])
 		}
 	}
 	else {
-		Device_power_ctl(DEVICE_RS485_CHIP, 1);
 		Device_power_ctl(DEVICE_CAN_CHIP, 0);
 		Device_power_ctl(DEVICE_CAN_12V, 0);
 	}

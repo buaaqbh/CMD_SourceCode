@@ -59,6 +59,8 @@ int Sensor_RS485_ReadData(byte addr, byte *buf)
 		Device_power_ctl(DEVICE_RS485_RESET, 1);
 	}
 
+	system("echo 1 >/sys/devices/platform/gpio-power.0/rs485_direction");
+
 	fd = uart_open_dev(UART_PORT_RS485);
 	if (fd == -1) {
 		logcat("RS485 Open port: %s\n", strerror(errno));
@@ -79,24 +81,24 @@ int Sensor_RS485_ReadData(byte addr, byte *buf)
 	cmd[10] = (crc16 & 0xff00) >> 8;
 	cmd[11] = crc16 & 0x00ff;
 
+	ret = io_writen(fd, cmd, 13);
+	if (ret != 13) {
+		logcat("RS485 Sensor 0x%x: write error, ret = %d\n", addr, ret);
+		Device_power_ctl(DEVICE_RS485_RESET, 1);
+		goto err;
+	}
+	usleep(250 * 1000);
+
 #ifdef _DEBUG
 	logcat("RS485 Sensor 0x%x Send Cmd: ", addr);
 	debug_out(cmd, 13);
 #endif
 
-	system("echo 1 >/sys/devices/platform/gpio-power.0/rs485_direction");
-	ret = io_writen(fd, cmd, 13);
-	if (ret != 13) {
-		logcat("RS485 Sensor 0x%x: write error, ret = %d\n", addr, ret);
-		goto err;
-	}
-	usleep(250 * 1000);
-
 	system("echo 0 >/sys/devices/platform/gpio-power.0/rs485_direction");
-	usleep(50 * 1000);
+	usleep(10 * 1000);
 	memset(buf, 0, 16);
 	ret = io_readn(fd, buf, 13, timeout);
-	if (ret <= 0) {
+	if (ret != 13) {
 		logcat("RS485 Sensor 0x%x: read error, ret = %d\n", addr, ret);
 		goto err;
 	}
@@ -485,7 +487,7 @@ int RS485_Sample_FuBing(Data_ice_thickness_t *data)
 	int record_len = 0;
 	int i, j;
 	float f_threshold = 0.0;
-	byte addr_rs485_tension = 0x02;
+	byte addr_rs485_tension = 0x04;
 
 	memset(&record, 0, sizeof(struct record_fubing));
 	record.tm = rtc_get_time();
@@ -518,16 +520,16 @@ int RS485_Sample_FuBing(Data_ice_thickness_t *data)
 		sleep(5);
 		}
 
-		addr_rs485_tension++;
+		addr_rs485_tension--;
 	}
 
 Sample_finish:
 	if (ret == 0) {
-		data->Tension = force * 9.8; // force: kgf, Tension: N
+		data->Tension = (float)force * 9.80; // force: kgf, Tension: N
 //		data->Windage_Yaw_Angle = asin((angle_x - 1024.0) / 819.0) * 180 / 3.14;
 //		data->Deflection_Angle = asin((angle_y - 1024.0) / 819.0) * 180 / 3.14;
-		data->Windage_Yaw_Angle = angle_x / 100;
-		data->Deflection_Angle = angle_y  / 100;
+		data->Windage_Yaw_Angle = (float)angle_x / 100.00;
+		data->Deflection_Angle = (float)angle_y  / 100.00;
 		data->Tension_Difference = wav_cycle;
 		data->Reserve1 = wav_x;
 		data->Reserve2 = wav_y;
