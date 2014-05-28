@@ -207,7 +207,7 @@ int Device_power_ctl(cma_device_t dev, int powerOn)
 		break;
 	case DEVICE_RS485_RESET:
 		system("echo 90 > /sys/devices/platform/gpio-power.0/power_rs485_12v");
-		sleep(5);
+		sleep(3);
 		break;
 	case DEVICE_AV:
 		signal(SIGALRM, av_power_off);

@@ -71,7 +71,7 @@ int sample_avg(int *data, int size)
 	int max, min, total;
 	float avg = 0.0;
 	if ((data == NULL) | (size <= 2))
-		return 0;
+		return data[0];
 
 	max = min = total = data[0];
 	for (i = 1; i < size; i++) {

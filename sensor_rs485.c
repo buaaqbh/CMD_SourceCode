@@ -84,7 +84,6 @@ int Sensor_RS485_ReadData(byte addr, byte *buf)
 	ret = io_writen(fd, cmd, 13);
 	if (ret != 13) {
 		logcat("RS485 Sensor 0x%x: write error, ret = %d\n", addr, ret);
-		Device_power_ctl(DEVICE_RS485_RESET, 1);
 		goto err;
 	}
 	usleep(250 * 1000);
@@ -109,7 +108,7 @@ int Sensor_RS485_ReadData(byte addr, byte *buf)
 #endif
 
 	crc16 = (buf[10] << 8) | buf[11];
-//	logcat("crc16 = 0x%x, caculate = 0x%0x\n", crc16, RTU_CRC(buf, 10));
+	logcat("crc16 = 0x%x, caculate = 0x%0x\n", crc16, RTU_CRC(buf, 10));
 	if (crc16 != RTU_CRC(buf, 10)) {
 		logcat("RS485 Sensor 0x%x: CRC Check error.\n", addr);
 		goto err;
@@ -146,7 +145,7 @@ void *sensor_qixiang_rs485_temp(void * arg)
 	memset(pres, 0, 6);
 	j = 0;
 
-	for (i = 0; i < 6; i++) {
+	for (i = 0; i < 3; i++) {
 		memset(buf, 0, 64);
 		if (Sensor_RS485_ReadData(addr_temp, buf) == 0) {
 			temp[j] = ((buf[4] & 0x7f) << 8) | buf[5];
@@ -158,40 +157,44 @@ void *sensor_qixiang_rs485_temp(void * arg)
 			logcat("RS485 Sample: temp = %d, humi = %d, press = %d\n", temp[j], humi[j], pres[j]);
 			j++;
 			data_qixiang_flag++;
+			break;
 		}
 
-		if ((i == 5) && (j > 0)) {
-			pdata->Air_Temperature = (float)sample_avg(temp, j) / 10;
-			pdata->Humidity = (usint)sample_avg(humi, j);
-			pdata->Air_Pressure = (float)sample_avg(pres, j);
-			CMA_Env_Parameter.temp = pdata->Air_Temperature;
+		if (i < 5) {
+			pthread_mutex_lock(&rs485_mutex);
+			Device_power_ctl(DEVICE_RS485_RESET, 1);
+			pthread_mutex_unlock(&rs485_mutex);
+		}
+	}
 
-			logcat("Temperature: i = %d, j = %d, %f, %d, %f\n", i, j, pdata->Air_Temperature,
-					pdata->Humidity, pdata->Air_Pressure);
+	if (j > 0) {
+		pdata->Air_Temperature = (float)temp[0] / 10;
+		pdata->Humidity = (usint)humi[0];
+		pdata->Air_Pressure = (float)pres[0];
+		CMA_Env_Parameter.temp = pdata->Air_Temperature;
 
-			if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 6, &f_threshold) == 0) {
+		logcat("Temperature: i = %d, j = %d, %f, %d, %f\n", i, j, pdata->Air_Temperature,
+				pdata->Humidity, pdata->Air_Pressure);
+
+		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 6, &f_threshold) == 0) {
 //				logcat("temp = %f, f_threshold = %f \n", s_data.Air_Temperature, f_threshold);
-				if (pdata->Air_Temperature > f_threshold) {
-					pdata->Alerm_Flag |= (1 << 5);
-				}
-			}
-			else {
-				logcat("Sensor Get temp threshold error.\n");
-			}
-
-			if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 7, &i_threshold) == 0) {
-				if (pdata->Humidity > i_threshold)
-					pdata->Alerm_Flag |= (1 << 6);
-			}
-
-			if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 8, &f_threshold) == 0) {
-				if (pdata->Air_Pressure > f_threshold)
-					pdata->Alerm_Flag |= (1 << 7);
+			if (pdata->Air_Temperature > f_threshold) {
+				pdata->Alerm_Flag |= (1 << 5);
 			}
 		}
+		else {
+			logcat("Sensor Get temp threshold error.\n");
+		}
 
-		if (i < 5)
-			sleep(8);
+		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 7, &i_threshold) == 0) {
+			if (pdata->Humidity > i_threshold)
+				pdata->Alerm_Flag |= (1 << 6);
+		}
+
+		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 8, &f_threshold) == 0) {
+			if (pdata->Air_Pressure > f_threshold)
+				pdata->Alerm_Flag |= (1 << 7);
+		}
 	}
 
 	if (j > 0) {
@@ -215,31 +218,35 @@ void *sensor_qixiang_rs485_radiation(void * arg)
 	memset(radia, 0, 6);
 	j = 0;
 
-	for (i = 0; i < 6; i++) {
+	for (i = 0; i < 3; i++) {
 		memset(buf, 0, 64);
 		if (Sensor_RS485_ReadData(addr_radiation, buf) == 0) {
 			radia[j] = (buf[4] << 8) | buf[5];
 			logcat("RS485 Sample: i = %d, j = %d, radiation = %d\n", i, j, radia[j]);
 			j++;
 			data_qixiang_flag++;
+			break;
 		}
 
-		if ((i == 5) && (j > 0)) {
-			pdata->Radiation_Intensity = sample_avg(radia, j);
+		if (i < 5) {
+			pthread_mutex_lock(&rs485_mutex);
+			Device_power_ctl(DEVICE_RS485_RESET, 1);
+			pthread_mutex_unlock(&rs485_mutex);
+		}
+	}
 
-			if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 11, &i_threshold) == 0) {
+	if (j > 0) {
+		pdata->Radiation_Intensity = radia[0];
+
+		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 11, &i_threshold) == 0) {
 //				logcat("temp = %f, f_threshold = %f \n", s_data.Air_Temperature, f_threshold);
-				if (pdata->Radiation_Intensity > i_threshold) {
-					pdata->Alerm_Flag |= (1 << 10);
-				}
-			}
-			else {
-				logcat("Sensor Get radiation threshold error.\n");
+			if (pdata->Radiation_Intensity > i_threshold) {
+				pdata->Alerm_Flag |= (1 << 10);
 			}
 		}
-
-		if (i < 5)
-			sleep(8);
+		else {
+			logcat("Sensor Get radiation threshold error.\n");
+		}
 	}
 
 	if (j > 0) {
@@ -260,6 +267,8 @@ void *sensor_qixiang_rs485_wind(void * arg)
 	int speed_d[3];
 	int max = 0;
 	Data_qixiang_t *pdata = (Data_qixiang_t *)arg;
+
+	logcat("Sensor: Get Windy data from rs485 device.\n");
 
 	pdata->Average_WindSpeed_10min = 0;
 	pdata->Average_WindDirection_10min = 0;
@@ -286,7 +295,7 @@ void *sensor_qixiang_rs485_wind(void * arg)
 			j++;
 		}
 		if (i < 2)
-			sleep(1);
+			sleep(2);
 	}
 
 	if (j > 0) {
@@ -298,7 +307,7 @@ void *sensor_qixiang_rs485_wind(void * arg)
 		pdata->Average_WindDirection_10min = speed_d[j - 1];
 		pdata->Max_WindSpeed = max / 10.0;
 		pdata->Extreme_WindSpeed = max / 10.0;
-		pdata->Standard_WindSpeed = speed[2] / 10.0;
+		pdata->Standard_WindSpeed = speed[j - 1] / 10.0;
 	}
 
 	if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 1, &f_threshold) == 0) {
@@ -501,7 +510,7 @@ int RS485_Sample_FuBing(Data_ice_thickness_t *data)
 
 	for (i = 0; i < 3; i++) {
 		memset(buf, 0, 64);
-		for (j = 0; j < 3; j++) {
+		for (j = 0; j < 2; j++) {
 		if (Sensor_RS485_ReadData(addr_rs485_tension, buf) == 0) {
 			force = (buf[4] << 8) | buf[5];
 			angle_x = ((buf[6] & 0x7f) << 8) | buf[7];
@@ -517,7 +526,7 @@ int RS485_Sample_FuBing(Data_ice_thickness_t *data)
 
 			goto Sample_finish;
 		}
-		sleep(5);
+		sleep(2);
 		}
 
 		addr_rs485_tension--;
