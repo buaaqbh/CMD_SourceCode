@@ -387,9 +387,9 @@ int main(int argc, char *argv[])
 	}
 */
 
-	if (Zigbee_Device_Init() < 0) {
-		logcat("Zigbee Device Init Error.\n");
-	}
+//	if (Zigbee_Device_Init() < 0) {
+//		logcat("Zigbee Device Init Error.\n");
+//	}
 
 	/* Init Receive Buffer */
 	for (i = 0; i < RCV_BUFFER_NUM; i++) {

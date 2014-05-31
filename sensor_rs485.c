@@ -60,6 +60,7 @@ int Sensor_RS485_ReadData(byte addr, byte *buf)
 	}
 
 	system("echo 1 >/sys/devices/platform/gpio-power.0/rs485_direction");
+	usleep(200 * 1000);
 
 	fd = uart_open_dev(UART_PORT_RS485);
 	if (fd == -1) {
@@ -86,7 +87,7 @@ int Sensor_RS485_ReadData(byte addr, byte *buf)
 		logcat("RS485 Sensor 0x%x: write error, ret = %d\n", addr, ret);
 		goto err;
 	}
-	usleep(250 * 1000);
+	usleep(200 * 1000);
 
 #ifdef _DEBUG
 	logcat("RS485 Sensor 0x%x Send Cmd: ", addr);
@@ -353,9 +354,9 @@ int RS485_Sample_Qixiang(Data_qixiang_t *sp_data)
 	logcat("CMD: RS485 sample Weather data start.\n");
 
 	/* Zigbee Sensor Operation */
-	ret = pthread_create(&p1, NULL, sensor_qixiang_zigbee, sp_data);
-	if (ret != 0)
-		logcat("Sensor: can't create zigbee thread.\n");
+//	ret = pthread_create(&p1, NULL, sensor_qixiang_zigbee, sp_data);
+//	if (ret != 0)
+//		logcat("Sensor: can't create zigbee thread.\n");
 
 	/* RS485 Sensor Operation */
 	ret = pthread_create(&p2, NULL, sensor_qixiang_rs485_temp, sp_data);

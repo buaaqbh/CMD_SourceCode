@@ -766,7 +766,7 @@ int Camera_Control(byte action, byte presetting, byte channel)
 
 	logcat("Camera Control: action = %d, preSetting = %d\n", action, presetting);
 
-	Device_power_ctl(DEVICE_RS485_CHIP, 1);
+	system("echo 1 > /sys/devices/platform/gpio-power.0/power_av_rs485");
 	Device_power_ctl(DEVICE_AV, 1);
 	sleep(1);
 
@@ -811,7 +811,7 @@ int Camera_Control(byte action, byte presetting, byte channel)
 //	pthread_mutex_unlock(&rs485_mutex);
 
 	Device_power_ctl(DEVICE_AV, 0);
-	Device_power_ctl(DEVICE_RS485_CHIP, 0);
+	system("echo 0 > /sys/devices/platform/gpio-power.0/power_av_rs485");
 
 	return ret;
 }
