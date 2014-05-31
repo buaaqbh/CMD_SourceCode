@@ -59,7 +59,9 @@ int Sensor_RS485_ReadData(byte addr, byte *buf)
 		Device_power_ctl(DEVICE_RS485_RESET, 1);
 	}
 
+	usleep(200 * 1000);
 	system("echo 1 >/sys/devices/platform/gpio-power.0/rs485_direction");
+	usleep(200 * 1000);
 
 	fd = uart_open_dev(UART_PORT_RS485);
 	if (fd == -1) {
@@ -86,7 +88,7 @@ int Sensor_RS485_ReadData(byte addr, byte *buf)
 		logcat("RS485 Sensor 0x%x: write error, ret = %d\n", addr, ret);
 		goto err;
 	}
-	usleep(250 * 1000);
+	usleep(100 * 1000);
 
 #ifdef _DEBUG
 	logcat("RS485 Sensor 0x%x Send Cmd: ", addr);
@@ -229,9 +231,7 @@ void *sensor_qixiang_rs485_radiation(void * arg)
 		}
 
 		if (i < 5) {
-			pthread_mutex_lock(&rs485_mutex);
-			Device_power_ctl(DEVICE_RS485_RESET, 1);
-			pthread_mutex_unlock(&rs485_mutex);
+			sleep(5);
 		}
 	}
 
