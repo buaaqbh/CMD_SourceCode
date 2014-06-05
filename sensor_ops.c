@@ -141,7 +141,7 @@ int Sensor_Sample_Qixiang(Data_qixiang_t *data)
 		ret = RS485_Sample_Qixiang(data);
 
 		Device_power_ctl(DEVICE_RS485, 0);
-		Device_power_ctl(DEVICE_RS485_CHIP, 0);
+//		Device_power_ctl(DEVICE_RS485_CHIP, 0);
 	}
 
 	return ret;
@@ -167,7 +167,7 @@ int Sensor_Sample_TGQingXie(Data_incline_t *data)
 		ret = RS485_Sample_TGQingXie(data);
 
 		Device_power_ctl(DEVICE_RS485, 0);
-		Device_power_ctl(DEVICE_RS485_CHIP, 0);
+//		Device_power_ctl(DEVICE_RS485_CHIP, 0);
 	}
 
 	return ret;
@@ -193,7 +193,7 @@ int Sensor_Sample_FuBing(Data_ice_thickness_t *data)
 		ret = RS485_Sample_FuBing(data);
 
 		Device_power_ctl(DEVICE_RS485, 0);
-		Device_power_ctl(DEVICE_RS485_CHIP, 0);
+//		Device_power_ctl(DEVICE_RS485_CHIP, 0);
 	}
 
 	return ret;

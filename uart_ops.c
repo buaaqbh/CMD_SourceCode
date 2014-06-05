@@ -11,15 +11,32 @@
 
 int uart_open_dev(char *dev)
 {
-	int fd = open(dev, O_RDWR);  //| O_NOCTTY | O_NDELAY
+//	int fd = open(dev, O_RDWR);  //| O_NOCTTY | O_NDELAY
+	int fd = open(dev, O_RDWR | O_NOCTTY | O_NDELAY);
 	if (-1 == fd) { 			
-		logcat("serial port open error: %s\n", strerror(errno));
+		logcat("UART: serial port open error: %s\n", strerror(errno));
 		return -1;		
 	}
 	else {
 //		logcat("Serial: Open %s Sucessful.\n", dev);
-		return fd;
+//		return fd;
 	}
+
+    if(fcntl(fd, F_SETFL, 0)<0) {
+        logcat("UART: fcntl failed!\n");
+    }
+    else {
+        logcat("UART: fcntl = %d\n", fcntl(fd, F_SETFL,0));
+    }
+
+    if(isatty(STDIN_FILENO)==0) {
+        logcat("UART: standard input is not a terminal device\n");
+    }
+    else {
+        logcat("UART: isatty success!\n");
+    }
+
+    return fd;
 }
 
 void uart_close_dev(int fd)
