@@ -50,6 +50,12 @@ int Sensor_RS485_ReadData(byte addr, byte *buf)
 	int timeout = 2;
 	int fd = -1;
 	int ret = 0;
+	int retry = 1;
+	int delay = 500;
+
+	if (addr == 0x04) {
+		delay = 150;
+	}
 
 //	logcat("--------- Enter func: %s -----------\n", __func__);
 
@@ -59,6 +65,7 @@ int Sensor_RS485_ReadData(byte addr, byte *buf)
 		Device_power_ctl(DEVICE_RS485_RESET, 1);
 	}
 
+Read_retry:
 	usleep(200 * 1000);
 	system("echo 1 >/sys/devices/platform/gpio-power.0/rs485_direction");
 	usleep(200 * 1000);
@@ -69,6 +76,9 @@ int Sensor_RS485_ReadData(byte addr, byte *buf)
 		pthread_mutex_unlock(&rs485_mutex);
 		return -1;
 	}
+	else
+		logcat("RS485 Open port: %s, fd = %d\n", UART_PORT_RS485, fd);
+
 	uart_set_speed(fd, UART_RS485_SPEDD);
 	if(uart_set_parity(fd, 8, 1, 'N') == -1) {
 		logcat ("RS485 %s: Set Parity Error", UART_PORT_RS485);
@@ -88,7 +98,8 @@ int Sensor_RS485_ReadData(byte addr, byte *buf)
 		logcat("RS485 Sensor 0x%x: write error, ret = %d\n", addr, ret);
 		goto err;
 	}
-	usleep(100 * 1000);
+
+	usleep(delay * 1000);
 
 #ifdef _DEBUG
 	logcat("RS485 Sensor 0x%x Send Cmd: ", addr);
@@ -96,15 +107,23 @@ int Sensor_RS485_ReadData(byte addr, byte *buf)
 #endif
 
 	system("echo 0 >/sys/devices/platform/gpio-power.0/rs485_direction");
-	usleep(10 * 1000);
+//	usleep(10 * 1000);
 	memset(buf, 0, 16);
 	ret = io_readn(fd, buf, 13, timeout);
 	if (ret != 13) {
 		logcat("RS485 Sensor 0x%x: read error, ret = %d\n", addr, ret);
+		if ((ret > 0) && (retry > 0)) {
+			logcat("RS485 Sensor 0x%x: read error, retry once!\n", addr);
+			retry = 0;
+			close(fd);
+			sleep(5);
+			goto Read_retry;
+		}
 		goto err;
 	}
 
 #ifdef _DEBUG
+	logcat("Sensor delay = %d \n", delay);
 	logcat("RS485 Sensor 0x%x Receive: ", addr);
 	debug_out(buf, 13);
 #endif
@@ -163,9 +182,7 @@ void *sensor_qixiang_rs485_temp(void * arg)
 		}
 
 		if (i < 5) {
-			pthread_mutex_lock(&rs485_mutex);
-			Device_power_ctl(DEVICE_RS485_RESET, 1);
-			pthread_mutex_unlock(&rs485_mutex);
+			sleep(5);
 		}
 	}
 

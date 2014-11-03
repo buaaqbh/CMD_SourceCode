@@ -77,6 +77,7 @@ int Camera_SendCmd(byte *cmd, int len)
 	}
 
 	system("echo 1 >/sys/devices/platform/gpio-power.0/rs485_direction");
+	usleep(10 * 1000);
 	cmd[len - 1] = checksum((cmd + 1), 5);
 	err = io_writen(fd, cmd, len);
 	if (err > 0)
