@@ -35,78 +35,53 @@ extern "C" {
 #define CMA_FRAME_TYPE_DATA_RES			0x02
 #define CMA_FRAME_TYPE_CONTROL			0x03
 #define CMA_FRAME_TYPE_CONTROL_RES		0x04
-#define CMA_FRAME_TYPE_IMAGE			0x05
-#define CMA_FRAME_TYPE_IMAGE_CTRL		0x06
-#define CMA_FRAME_TYPE_STATUS			0x07
-#define CMA_FRAME_TYPE_STATUS_RES		0x08
-#define CMA_FRAME_TYPE_SYNC_DATA		0x09
+#define CMA_FRAME_TYPE_IMAGE_DATA		0x05
+#define CMA_FRAME_TYPE_IMAGE_DATA_RES	0x06
+#define CMA_FRAME_TYPE_IMAGE_CTRL		0x07
+#define CMA_FRAME_TYPE_IMAGE_CTRL_RES	0x08
+#define CMA_FRAME_TYPE_STATUS			0x09
+#define CMA_FRAME_TYPE_STATUS_RES		0x0a
 
 #define CMA_MSG_TYPE_DATA_QXENV			0x01
-#define CMA_MSG_TYPE_DATA_TGQXIE		0x0c
-#define CMA_MSG_TYPE_DATA_DDXWFTZ		0x1e
-#define CMA_MSG_TYPE_DATA_DDXWFBX		0x1f
-#define CMA_MSG_TYPE_DATA_DXHCH			0x20
-#define CMA_MSG_TYPE_DATA_DXWD			0x21
-#define CMA_MSG_TYPE_DATA_FUBING		0x22
-#define CMA_MSG_TYPE_DATA_DXFP			0x23
-#define CMA_MSG_TYPE_DATA_DXWDTZH		0x24
-#define CMA_MSG_TYPE_DATA_DXWDGJ		0x25
-#define CMA_MSG_TYPE_DATA_XCHWS			0x5c
+#define CMA_MSG_TYPE_DATA_TGQXIE		0x02
+#define CMA_MSG_TYPE_DATA_DDXWFTZ		0x03
+#define CMA_MSG_TYPE_DATA_DDXWFBX		0x04
+#define CMA_MSG_TYPE_DATA_DXHCH			0x05
+#define CMA_MSG_TYPE_DATA_DXWD			0x06
+#define CMA_MSG_TYPE_DATA_FUBING		0x07
+#define CMA_MSG_TYPE_DATA_DXFP			0x08
+#define CMA_MSG_TYPE_DATA_DXWDTZH		0x09
+#define CMA_MSG_TYPE_DATA_DXWDGJ		0x0a
+#define CMA_MSG_TYPE_DATA_XCHWS			0x0b
 
-#define CMA_MSG_TYPE_CTL_TIME_CS		0xA1
-#define CMA_MSG_TYPE_CTL_TIME_AD		0xA2
-#define CMA_MSG_TYPE_CTL_REQ_DATA		0xA3
-#define CMA_MSG_TYPE_CTL_CY_PAR			0xA4
-#define CMA_MSG_TYPE_CTL_MODEL_PAR		0xA5
-#define CMA_MSG_TYPE_CTL_ALARM			0xA6
-#define CMA_MSG_TYPE_CTL_TOCMA_INFO		0xA7
-#define CMA_MSG_TYPE_CTL_BASIC_INFO		0xA8
-#define CMA_MSG_TYPE_CTL_UPGRADE_DATA	0xA9
-#define CMA_MSG_TYPE_CTL_UPGRADE_END	0xAA
-#define CMA_MSG_TYPE_CTL_UPGRADE_REP	0xAB
-#define CMA_MSG_TYPE_CTL_DEV_ID			0xAC
-#define CMA_MSG_TYPE_CTL_DEV_RESET		0xAD
-#define CMA_MSG_TYPE_CTL_DEV_WAKE		0xAE
-#define CMA_MSG_TYPE_CTL_QX_PAR			0xAF
-#define CMA_MSG_TYPE_CTL_TGQX_PAR		0xB0
-#define CMA_MSG_TYPE_CTL_DDXWFZD_PAR	0xB1
-#define CMA_MSG_TYPE_CTL_DXHCH_PAR		0xB2
-#define CMA_MSG_TYPE_CTL_DXWD_PAR		0xB3
-#define CMA_MSG_TYPE_CTL_FUBING_PAR		0xB4
-#define CMA_MSG_TYPE_CTL_DXFP_PAR		0xB5
-#define CMA_MSG_TYPE_CTL_DDXWD_PAR		0xB6
-#define CMA_MSG_TYPE_CTL_XCHWS_PAR		0xB7
+#define CMA_MSG_TYPE_CTL_TIME_AD		0xA1
+#define CMA_MSG_TYPE_CTL_REQ_DATA		0xA2
+#define CMA_MSG_TYPE_CTL_CY_PAR			0xA3
+#define CMA_MSG_TYPE_CTL_TOCMA_INFO		0xA4
+#define CMA_MSG_TYPE_CTL_DEV_ID			0xA5
+#define CMA_MSG_TYPE_CTL_DEV_RESET		0xA6
+#define CMA_MSG_TYPE_CTL_MODEL_PAR		0xA7
 
-#define CMA_MSG_TYPE_IMAGE_CAP_PAR		0xC9
-#define CMA_MSG_TYPE_IMAGE_CAP_TIME		0xCA
-#define CMA_MSG_TYPE_IMAGE_CAP_MANUAL	0xCB
-#define CMA_MSG_TYPE_IMAGE_SENDIMG_REQ	0xCC
-#define CMA_MSG_TYPE_IMAGE_DATA			0xCD
-#define CMA_MSG_TYPE_IMAGE_DATA_END		0xCE
-#define CMA_MSG_TYPE_IMAGE_DATA_REP		0xCF
-#define CMA_MSG_TYPE_IMAGE_CAM_ADJ		0xD0
-#define CMA_MSG_TYPE_IMAGE_VIDEO_SET	0xD1
-#define CMA_MSG_TYPE_IMAGE_DEV_SERVER	0xD2
-#define CMA_MSG_TYPE_IMAGE_CONNECT_STOP	0xD3
-#define CMA_MSG_TYPE_IMAGE_BASIC_INFO	0xD4
-#define CMA_MSG_TYPE_IMAGE_GET_PAR		0xD5
-#define CMA_MSG_TYPE_IMAGE_GET_TIME		0xD6
+#define CMA_MSG_TYPE_IMAGE_CAP_PAR		0xB1
+#define CMA_MSG_TYPE_IMAGE_CAP_TIME		0xB2
+#define CMA_MSG_TYPE_IMAGE_CAP_MANUAL	0xB3
+#define CMA_MSG_TYPE_IMAGE_SENDIMG_REQ	0xB4
+#define CMA_MSG_TYPE_IMAGE_DATA			0xB5
+#define CMA_MSG_TYPE_IMAGE_DATA_END		0xB6
+#define CMA_MSG_TYPE_IMAGE_DATA_REP		0xB7
+#define CMA_MSG_TYPE_IMAGE_CAM_ADJ		0xB8
 
-#define CMA_MSG_TYPE_STATUS_HEART		0xE6
-#define CMA_MSG_TYPE_STATUS_INFO		0xE7
-#define CMA_MSG_TYPE_STATUS_WORK		0xE8
-#define CMA_MSG_TYPE_STATUS_ERROR		0xE9
+#define CMA_MSG_TYPE_STATUS_HEART		0xC1
+#define CMA_MSG_TYPE_STATUS_ERROR		0xC2
 
-#define CAMERA_ACTION_POWERON			1
-#define CAMERA_ACTION_CALLPRESET		2
-#define CAMERA_ACTION_MOVEUP			3
-#define CAMERA_ACTION_MOVEDOWN			4
-#define CAMERA_ACTION_MOVELEFT			5
-#define CAMERA_ACTION_MOVERIGHT			6
-#define CAMERA_ACTION_FOCUSFAR			7
-#define CAMERA_ACTION_FOCUSNERA			8
-#define CAMERA_ACTION_SETPRESET			9
-#define CAMERA_ACTION_POWEROFF			10
+#define CAMERA_ACTION_CALLPRESET		1
+#define CAMERA_ACTION_MOVEUP			2
+#define CAMERA_ACTION_MOVEDOWN			3
+#define CAMERA_ACTION_MOVELEFT			4
+#define CAMERA_ACTION_MOVERIGHT			5
+#define CAMERA_ACTION_FOCUSFAR			6
+#define CAMERA_ACTION_FOCUSNERA			7
+#define CAMERA_ACTION_SETPRESET			8
 
 
 #define 		CMA_MAX_SENSOR_NUM	20
@@ -128,7 +103,7 @@ typedef unsigned char 	byte;
 typedef struct env_data {
 	char 	id[18];
 	char	c_id[18];
-	usint	org_id;
+	char	org_id[18];
 	int 	l2_type;
 	int 	local_port;
 	char 	cma_ip[32];
@@ -138,6 +113,8 @@ typedef struct env_data {
 	int 	socket_fd;
 	float	temp;
 	int		sensor_type;
+	char 	imei[20];
+	int 	heart_cycle;
 } env_data_t;
 
 extern env_data_t CMA_Env_Parameter;
@@ -151,13 +128,13 @@ typedef struct _frame_str_head
 	byte 	id[17];
 	byte 	frame_type;
 	byte 	msg_type;
+	byte 	index;
 } frame_head_t;
 
 typedef struct _data_str_qixiang
 {
 	byte 	Component_ID[17];
 	int 	Time_Stamp;
-	usint 	Alerm_Flag;
 	float 	Average_WindSpeed_10min;
 	usint 	Average_WindDirection_10min;
 	float 	Max_WindSpeed;
@@ -169,40 +146,36 @@ typedef struct _data_str_qixiang
 	float 	Precipitation;
 	float 	Precipitation_Intensity;
 	int 	Radiation_Intensity;
-	int 	Reserve1;
-	int 	Reserve2;
 } Data_qixiang_t;
 
 typedef struct _data_str_incline
 {
 	byte 	Component_ID[17];
 	int 	Time_Stamp;
-	usint 	Alerm_Flag;
 	float 	Inclination;
 	float 	Inclination_X;
 	float 	Inclination_Y;
 	float 	Angle_X;
 	float 	Angle_Y;
-	int 	Reserve1;
-	int 	Reserve2;
 } Data_incline_t;
 
 typedef struct _data_str_vibration_f
 {
 	byte 	Component_ID[17];
+	byte	Unit_Sum;
+	byte	Unit_Num;
 	int 	Time_Stamp;
-	usint 	Alerm_Flag;
-	usint 	Vibration_Amplitude;
-	int 	Vibration_Frequency;
-	int 	Reserve1;
-	int 	Reserve2;
+	usint	Strain_Amplitude;
+	float	Bending_Amplitude;
+	float	Vibration_Frequence;
 } Data_vibration_f_t;
 
 typedef struct _data_str_vibration_w
 {
 	byte 	Component_ID[17];
+	byte	Unit_Sum;
+	byte	Unit_Num;
 	int 	Time_Stamp;
-	usint 	Alerm_Flag;
 	byte 	SamplePack_Sum;
 	byte	SamplePack_No;
 	usint 	*Strain_Data;
@@ -213,71 +186,62 @@ typedef struct _data_str_conductor_sag
 {
 	byte 	Component_ID[17];
 	int 	Time_Stamp;
-	usint 	Alerm_Flag;
-	int 	Conductor_Sag;
-	int 	Toground_Distance;
-	int 	Angle;
+	float 	Conductor_Sag;
+	float 	Toground_Distance;
+	float 	Angle;
 	byte 	Measure_Flag;
-	int 	Reserve1;
-	int 	Reserve2;
 } Data_conductor_sag_t;
 
 typedef struct _data_str_line_temperature
 {
 	byte 	Component_ID[17];
+	byte	Unit_Sum;
+	byte	Unit_Num;
 	int 	Time_Stamp;
-	usint 	Alerm_Flag;
-	int 	Line_Temperature1;
-	int 	Line_Temperature2;
-	int 	Reserve1;
-	int 	Reserve2;
+	int 	Line_Temperature;
 } Data_line_temperature_t;
 
 typedef struct _data_str_ice_thickness
 {
 	byte 	Component_ID[17];
 	int 	Time_Stamp;
-	usint 	Alerm_Flag;
 	float 	Equal_IceThickness;
 	float 	Tension;
 	float 	Tension_Difference;
 	float 	Windage_Yaw_Angle;
 	float 	Deflection_Angle;
-	int 	Reserve1;
-	int 	Reserve2;
+	byte	T_Sensor_Num;
+	float	*Original_data;
 } Data_ice_thickness_t;
 
 typedef struct _data_str_windage_yaw
 {
 	byte 	Component_ID[17];
 	int 	Time_Stamp;
-	usint 	Alerm_Flag;
 	int 	Windage_Yaw_Angle;
 	int 	Deflection_Angle;
 	int 	Least_Clearance;
-	int 	Reserve1;
-	int 	Reserve2;
 } Data_windage_yaw_t;
 
 typedef struct _data_str_line_gallop_f
 {
 	byte 	Component_ID[17];
+	byte	Unit_Sum;
+	byte	Unit_Num;
 	int 	Time_Stamp;
-	usint 	Alerm_Flag;
 	int 	U_Gallop_Amplitude;
 	int 	U_Vertical_Amplitude;
 	int 	U_Horizontal_Amplitude;
 	int 	U_AngleToVertica;
 	int 	U_Gallop_Frequency;
-	int 	Reserve1;
-	int 	Reserve2;
 } Data_line_gallop_f_t;
 
 typedef struct _data_str_gallop_w
 {
 	byte 	Component_ID[17];
+	byte	Unit_Sum;
+	byte	Unit_Num;
 	int 	Time_Stamp;
-	usint 	Alerm_Flag;
 	byte 	SamplePack_Sum;
 	byte 	SamplePack_No;
 	byte 	*Displacement;
@@ -288,15 +252,12 @@ typedef struct _data_str_dirty
 {
 	byte 	Component_ID[17];
 	int 	Time_Stamp;
-	usint 	Alerm_Flag;
 	int 	ESDD;
 	int 	NSDD;
 	int 	Daily_Max_Temperature;
 	int 	Daily_Min_Temperature;
 	usint 	Daily_Max_Humidity;
 	usint 	Daily_Min_Humidity;
-	int 	Reserve1;
-	int 	Reserve2;
 } Data_dirty_t;
 
 typedef struct _ctl_response_net_adapter
@@ -304,25 +265,22 @@ typedef struct _ctl_response_net_adapter
 	unsigned long 	IP;
 	unsigned long 	Subnet_mask;
 	unsigned long 	Gateway;
-	unsigned long 	DNS_Server;
-	byte 	reserve[16];
+	byte			PhoneNumber[20];
 } Ctl_net_adap_t;
 
 typedef struct _ctl_response_sample
 {
+	byte	Request_flag;
 	byte 	Request_Type;
 	usint 	Main_Time;
-	usint 	Sample_Count;
-	usint 	Sample_Frequency;
-	byte 	reserve[4];
+	byte 	Heartbeat_Time;
 } Ctl_sample_par_t;
 
 typedef struct _ctl_response_up_device
 {
+	byte 	Request_flag;
 	unsigned long IP_Address;
 	usint 	Port;
-	byte 	Domain_Name[64];
-	byte 	reserve[12];
 } Ctl_up_device_t;
 
 typedef struct _ctl_response_image_par
@@ -332,7 +290,6 @@ typedef struct _ctl_response_image_par
 	byte 	Luminance;
 	byte 	Contrast;
 	byte 	Saturation;
-	byte 	Reserve[8];
 } Ctl_image_device_t;
 
 typedef struct _ctl_image_timetable
@@ -371,7 +328,9 @@ typedef struct _status_str_working
 	float 	Total_Working_Time;
 	float 	Working_Time;
 	byte 	Connection_State;
-	byte	reserve[30];
+	uint	Send_Flow;
+	uint	Receive_Flow;
+	uint	Protocal_Version;
 } status_working_t;
 
 typedef struct _alarm_value {

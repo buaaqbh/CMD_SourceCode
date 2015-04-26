@@ -56,7 +56,9 @@ int Device_Env_init(void)
 	if (strlen(id) == 17)
 		memcpy(CMA_Env_Parameter.c_id, id, 17);
 
-	CMA_Env_Parameter.org_id = iniparser_getint(ini, "CMD:org_id", 0);
+	id = iniparser_getstring(ini, "CMD:org_id", NULL);
+	if (strlen(id) == 17)
+		memcpy(CMA_Env_Parameter.org_id, id, 17);
 
 	CMA_Env_Parameter.l2_type = iniparser_getint(ini, "L2:type", 0);
 	destip = iniparser_getstring(ini, "CAG:ip", NULL);
@@ -79,6 +81,8 @@ int Device_Env_init(void)
 
 	CMA_Env_Parameter.sensor_type = 0;
 	CMA_Env_Parameter.sensor_type = iniparser_getint(ini, "Sensor:type", 0);
+
+	CMA_Env_Parameter.heart_cycle = iniparser_getint(ini, "heartbeat:period", 2);
 
 	iniparser_freedict(ini);
 	return 0;
@@ -582,6 +586,8 @@ int Device_get_working_status(status_working_t *status)
 	capacity = (status->Battery_Voltage - VOLTAGE_MIN) * 100 / (VOLTAGE_MAX - VOLTAGE_MIN);
 	status->Battery_Capacity = capacity;
 
+	status->Protocal_Version = CMD_PROTOCAL_VERSION;
+
 	return 0;
 }
 
@@ -687,7 +693,7 @@ int Device_getNet_info(Ctl_net_adap_t  *adap)
 	inet_aton(dns, &sin.sin_addr);
 
 	adap->Gateway = gateway;
-	adap->DNS_Server = sin.sin_addr.s_addr;
+	memcpy(adap->PhoneNumber, CMA_Env_Parameter.imei, 20);
 
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
 	if (sock == -1) {
@@ -727,21 +733,21 @@ int Device_setNet_info(Ctl_net_adap_t  *adap)
 	return 0;
 }
 
-int Device_getId(byte *id, usint *org_id)
+int Device_getId(byte *cmd_id, byte *c_id, byte *org_id)
 {
-	if ((id == NULL) || (org_id == NULL))
+	if ((cmd_id == NULL) || (org_id == NULL) || (c_id == NULL))
 		return -1;
 
-	memcpy(id, CMA_Env_Parameter.c_id, 17);
-	*org_id = CMA_Env_Parameter.org_id;
+	memcpy(cmd_id, CMA_Env_Parameter.id, 17);
+	memcpy(c_id, CMA_Env_Parameter.c_id, 17);
+	memcpy(org_id, CMA_Env_Parameter.org_id, 17);
 
 	return 0;
 }
 
-int Device_setId(byte *cmd_id, byte *c_id, usint org_id)
+int Device_setId(byte *cmd_id, byte *c_id, byte *org_id)
 {
 	dictionary  *ini;
-	char buf[32];
 	FILE *save;
 
 	if ((cmd_id == NULL) || (c_id == NULL))
@@ -757,17 +763,20 @@ int Device_setId(byte *cmd_id, byte *c_id, usint org_id)
 	else if (strlen((char *)c_id) > 17)
 		c_id[17] = '\0';
 
+	if (strlen((char *)org_id) < 17)
+		return -1;
+	else if (strlen((char *)org_id) > 17)
+		org_id[17] = '\0';
+
 	ini = iniparser_load(config_file);
 	if (ini==NULL) {
 		logcat("cannot parse file: %s\n", config_file);
 			return -1 ;
 	}
 
-	memset(buf, 0, 32);
-	sprintf(buf, "%d", org_id);
 	iniparser_set(ini, "CMD:id", (char *)cmd_id);
 	iniparser_set(ini, "CMD:c_id", (char *)c_id);
-	iniparser_set(ini, "CMD:org_id", buf);
+	iniparser_set(ini, "CMD:org_id", (char *)org_id);
 
 	if ((save = fopen(config_file, "w")) == NULL) {
 		iniparser_freedict(ini);
@@ -778,7 +787,7 @@ int Device_setId(byte *cmd_id, byte *c_id, usint org_id)
 
 	memcpy(CMA_Env_Parameter.id, cmd_id, 17);
 	memcpy(CMA_Env_Parameter.c_id, c_id, 17);
-	CMA_Env_Parameter.org_id = org_id;
+	memcpy(CMA_Env_Parameter.org_id, org_id, 17);
 
 	iniparser_freedict(ini);
 	return 0;
@@ -791,7 +800,6 @@ int Device_getServerInfo(Ctl_up_device_t  *up_device)
 
 	up_device->IP_Address = inet_addr(CMA_Env_Parameter.cma_ip);
 	up_device->Port = CMA_Env_Parameter.cma_port;
-	memcpy(up_device->Domain_Name, CMA_Env_Parameter.cma_domain, 64);
 
 	return 0;
 }
@@ -807,7 +815,7 @@ int Device_setServerInfo(Ctl_up_device_t  *up_device)
 		return -1;
 
 	addr.s_addr = up_device->IP_Address;
-	logcat("Set: ip = %s, port = %d, domain = %s\n", inet_ntoa(addr), up_device->Port, up_device->Domain_Name);
+	logcat("Set: ip = %s, port = %d\n", inet_ntoa(addr), up_device->Port);
 	ini = iniparser_load(config_file);
 	if (ini==NULL) {
 		logcat("cannot parse file: %s\n", config_file);
@@ -817,7 +825,6 @@ int Device_setServerInfo(Ctl_up_device_t  *up_device)
 	memset(buf, 0, 32);
 	sprintf(buf, "%d", up_device->Port);
 	iniparser_set(ini, "CAG:ip", inet_ntoa(addr));
-	iniparser_set(ini, "CAG:domain", (char *)up_device->Domain_Name);
 	iniparser_set(ini, "CAG:port", buf);
 
 	if ((save = fopen(config_file, "w")) == NULL) {
@@ -828,7 +835,6 @@ int Device_setServerInfo(Ctl_up_device_t  *up_device)
 	fclose(save);
 
 	memcpy(CMA_Env_Parameter.cma_ip, inet_ntoa(addr), 17);
-	memcpy(CMA_Env_Parameter.cma_domain, up_device->Domain_Name, 64);
 	CMA_Env_Parameter.cma_port = up_device->Port;
 
 	iniparser_freedict(ini);
@@ -836,7 +842,7 @@ int Device_setServerInfo(Ctl_up_device_t  *up_device)
 	return 0;
 }
 
-int Device_reset(usint type)
+int Device_reset(byte type)
 {
 	logcat("Device Reboot, type = %d \n", type);
 	system("/sbin/reboot");
@@ -850,6 +856,66 @@ int Device_setWakeup_time(int revival_time, usint revival_cycle, usint duration_
 	logcat("%s\n", ctime((time_t *)&revival_time));
 
 	return 0;
+}
+
+int Device_getHeartBeat_Cycle(void)
+{
+	dictionary  *ini;
+	int cycle = 0;
+
+	ini = iniparser_load(config_file);
+	if (ini==NULL) {
+		logcat("cannot parse file: %s\n", config_file);
+			return -1 ;
+	}
+
+	cycle = iniparser_getint(ini, "heartbeat:period", 2);
+
+	iniparser_freedict(ini);
+
+	return cycle;
+}
+
+int Device_setHeartBeat_Cycle(int value)
+{
+	dictionary  *ini;
+	int cycle = 0;
+	char buf[32];
+	FILE    *save;
+
+	if (value <= 0) {
+		logcat("CMD: Invalid cycle value.\n");
+		return -1;
+	}
+
+	ini = iniparser_load(config_file);
+	if (ini==NULL) {
+		logcat("cannot parse file: %s\n", config_file);
+			return -1 ;
+	}
+
+	cycle = iniparser_getint(ini, "heartbeat:period", 10);
+	if (value == cycle)
+		goto out;
+
+	memset(buf, 0, 32);
+	sprintf(buf, "%d", value);
+	iniparser_set(ini, "heartbeat:period", buf);
+
+	if ((save = fopen(config_file, "w")) == NULL) {
+		iniparser_freedict(ini);
+		return -1;
+	}
+	iniparser_dump_ini(ini, save);
+	fclose(save);
+
+	CMA_Env_Parameter.heart_cycle = cycle;
+
+//	logcat("Device func: %d, 0x%08x\n", sample_dev.interval, (unsigned int)&sample_dev);
+
+out:
+	iniparser_freedict(ini);
+	return cycle;
 }
 
 int Device_getSampling_Cycle(char *entry)

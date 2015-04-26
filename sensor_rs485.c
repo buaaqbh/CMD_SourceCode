@@ -154,8 +154,6 @@ void *sensor_qixiang_rs485_temp(void * arg)
 	int temp[6];
 	int humi[6];
 	int pres[6];
-	float f_threshold = 0.0;
-	int   i_threshold = 0;
 	byte addr_temp = 0x01;
 	Data_qixiang_t *pdata = (Data_qixiang_t *)arg;
 
@@ -194,26 +192,6 @@ void *sensor_qixiang_rs485_temp(void * arg)
 
 		logcat("Temperature: i = %d, j = %d, %f, %d, %f\n", i, j, pdata->Air_Temperature,
 				pdata->Humidity, pdata->Air_Pressure);
-
-		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 6, &f_threshold) == 0) {
-//				logcat("temp = %f, f_threshold = %f \n", s_data.Air_Temperature, f_threshold);
-			if (pdata->Air_Temperature > f_threshold) {
-				pdata->Alerm_Flag |= (1 << 5);
-			}
-		}
-		else {
-			logcat("Sensor Get temp threshold error.\n");
-		}
-
-		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 7, &i_threshold) == 0) {
-			if (pdata->Humidity > i_threshold)
-				pdata->Alerm_Flag |= (1 << 6);
-		}
-
-		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 8, &f_threshold) == 0) {
-			if (pdata->Air_Pressure > f_threshold)
-				pdata->Alerm_Flag |= (1 << 7);
-		}
 	}
 
 	if (j > 0) {
@@ -228,7 +206,6 @@ void *sensor_qixiang_rs485_radiation(void * arg)
 	int i, j;
 	byte buf[64];
 	int radia[6];
-	int   i_threshold = 0;
 	byte addr_radiation = 0x07;
 	Data_qixiang_t *pdata = (Data_qixiang_t *)arg;
 
@@ -254,16 +231,6 @@ void *sensor_qixiang_rs485_radiation(void * arg)
 
 	if (j > 0) {
 		pdata->Radiation_Intensity = radia[0];
-
-		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 11, &i_threshold) == 0) {
-//				logcat("temp = %f, f_threshold = %f \n", s_data.Air_Temperature, f_threshold);
-			if (pdata->Radiation_Intensity > i_threshold) {
-				pdata->Alerm_Flag |= (1 << 10);
-			}
-		}
-		else {
-			logcat("Sensor Get radiation threshold error.\n");
-		}
 	}
 
 	if (j > 0) {
@@ -276,8 +243,6 @@ void *sensor_qixiang_rs485_radiation(void * arg)
 void *sensor_qixiang_rs485_wind(void * arg)
 {
 	int i = 0, j = 0;
-	float f_threshold = 0.0;
-	int   i_threshold = 0;
 	int sum;
 	byte buf[64];
 	int speed[3];
@@ -325,31 +290,6 @@ void *sensor_qixiang_rs485_wind(void * arg)
 		pdata->Max_WindSpeed = max / 10.0;
 		pdata->Extreme_WindSpeed = max / 10.0;
 		pdata->Standard_WindSpeed = speed[j - 1] / 10.0;
-	}
-
-	if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 1, &f_threshold) == 0) {
-		if (pdata->Average_WindSpeed_10min > f_threshold)
-			pdata->Alerm_Flag |= (1 << 0);
-	}
-
-	if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 2, &i_threshold) == 0) {
-		if (pdata->Average_WindDirection_10min > i_threshold)
-			pdata->Alerm_Flag |= (1 << 1);
-	}
-
-	if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 3, &f_threshold) == 0) {
-		if (pdata->Max_WindSpeed > f_threshold)
-			pdata->Alerm_Flag |= (1 << 2);
-	}
-
-	if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 4, &f_threshold) == 0) {
-		if (pdata->Extreme_WindSpeed > f_threshold)
-			pdata->Alerm_Flag |= (1 << 3);
-	}
-
-	if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 5, &f_threshold) == 0) {
-		if (pdata->Standard_WindSpeed > f_threshold)
-			pdata->Alerm_Flag |= (1 << 4);
 	}
 
 	return 0;
@@ -426,7 +366,7 @@ int RS485_Sample_Qixiang(Data_qixiang_t *sp_data)
 		logcat("降雨量： %f \n", sp_data->Precipitation);
 		logcat("降水强度： %f \n", sp_data->Precipitation_Intensity);
 		logcat("光辐射： %d \n", sp_data->Radiation_Intensity);
-		logcat("Alarm： 0x%x \n", sp_data->Alerm_Flag);
+//		logcat("Alarm： 0x%x \n", sp_data->Alerm_Flag);
 	}
 
 	logcat("CMD: RS485 sample Weather data finished.\n");
@@ -441,7 +381,6 @@ int RS485_Sample_TGQingXie(Data_incline_t *data)
 	int angle_x, angle_y;
 	struct record_incline record;
 	int record_len = 0;
-	float f_threshold = 0.0;
 	byte addr_rs485_angle = 0x06;
 
 	memset(&record, 0, sizeof(struct record_incline));
@@ -481,17 +420,7 @@ int RS485_Sample_TGQingXie(Data_incline_t *data)
 	logcat("Sample Incline Data: \n");
 	logcat("顺线倾斜角： %f \n", data->Angle_X);
 	logcat("横向倾斜角： %f \n", data->Angle_Y);
-	logcat("Alarm： 0x%x \n", data->Alerm_Flag);
-
-	if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_TGQX_PAR, 4, &f_threshold) == 0) {
-		if (data->Angle_X > f_threshold)
-			data->Alerm_Flag |= (1 << 3);
-	}
-
-	if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_TGQX_PAR, 5, &f_threshold) == 0) {
-		if (data->Angle_Y > f_threshold)
-			data->Alerm_Flag |= (1 << 4);
-	}
+//	logcat("Alarm： 0x%x \n", data->Alerm_Flag);
 
 	ret = 0;
 
@@ -512,7 +441,6 @@ int RS485_Sample_FuBing(Data_ice_thickness_t *data)
 	struct record_fubing record;
 	int record_len = 0;
 	int i, j;
-	float f_threshold = 0.0;
 	byte addr_rs485_tension = 0x04;
 
 	memset(&record, 0, sizeof(struct record_fubing));
@@ -557,30 +485,10 @@ Sample_finish:
 		data->Windage_Yaw_Angle = (float)angle_x / 100.00;
 		data->Deflection_Angle = (float)angle_y  / 100.00;
 		data->Tension_Difference = wav_cycle;
-		data->Reserve1 = wav_x;
-		data->Reserve2 = wav_y;
+//		data->Reserve1 = wav_x;
+//		data->Reserve2 = wav_y;
 
-		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_FUBING_PAR, 1, &f_threshold) == 0) {
-			if (data->Tension > f_threshold)
-				data->Alerm_Flag |= (1 << 0);
-		}
-
-		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_FUBING_PAR, 2, &f_threshold) == 0) {
-			if (data->Windage_Yaw_Angle > f_threshold)
-				data->Alerm_Flag |= (1 << 1);
-		}
-
-		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_FUBING_PAR, 3, &f_threshold) == 0) {
-			if (data->Deflection_Angle > f_threshold)
-				data->Alerm_Flag |= (1 << 2);
-		}
-
-		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_FUBING_PAR, 4, &f_threshold) == 0) {
-			if (data->Tension_Difference > f_threshold)
-				data->Alerm_Flag |= (1 << 3);
-		}
-
-		record_len = sizeof(struct record_incline);
+		record_len = sizeof(struct record_fubing);
 		memcpy(&record.data, data, sizeof(Data_ice_thickness_t));
 		if (File_AppendRecord(RECORD_FILE_FUBING, (char *)&record, record_len) < 0) {
 			logcat("CMD: Recording Incline data error.\n");
@@ -591,7 +499,7 @@ Sample_finish:
 		logcat("不均衡张力差： %f \n", data->Tension_Difference);
 		logcat("绝缘子串风偏角： %f \n", data->Windage_Yaw_Angle);
 		logcat("绝缘子串倾斜角： %f \n", data->Deflection_Angle);
-		logcat("Alarm： 0x%x \n", data->Alerm_Flag);
+//		logcat("Alarm： 0x%x \n", data->Alerm_Flag);
 
 		sensor_status |= (1 << 6);
 	}

@@ -21,9 +21,9 @@ else
 THIRDLIBS = x86-lib
 endif
   
-INCLUDE_PATH = -I/home/qinbh/Dropbox/src/CMD_SourceCode/$(THIRDLIBS)/include
+INCLUDE_PATH = -I/home/bqin/Dropbox/src/CMD_SourceCode/$(THIRDLIBS)/include
 
-LIB_PATH = -L/home/qinbh/Dropbox/src/CMD_SourceCode/$(THIRDLIBS)/lib
+LIB_PATH = -L/home/bqin/Dropbox/src/CMD_SourceCode/$(THIRDLIBS)/lib
 
 LIBS = -lpthread -liniparser -lsocketcan -ljpeg -lv4l2 -lv4lconvert -liconv
 
@@ -33,14 +33,16 @@ OBJS = $(SRC:.c=.o)
 
 all: $(OBJS) $(SER_NAME)
 
-.PHONY:all clean
+.PHONY:all clean install
 
 $(SER_NAME):$(OBJS)
 	$(CXX) -o $(SER_NAME)_$(M_DATE) $(OBJS) $(INCLUDE_PATH) $(LIB_PATH) $(LIBS)
-	cp -rPf $(SER_NAME)_$(M_DATE) /home/qinbh/Work/imx/nfsroot
 
 %.o : %.c
 	$(CXX) -c $(COMPILE_FLAGS) $(INCLUDE_PATH) $< -o $@
+
+install:
+	cp -rPf $(SER_NAME)_$(M_DATE) /home/bqin/work/imx/nfsroot
 
 clean:
 	-rm *.o $(SER_NAME)_$(M_DATE)

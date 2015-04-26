@@ -70,7 +70,7 @@ int Commu_GetPacket_Udp(int fd, byte *rbuf, int len, int timeout)
 
 	memcpy(&size, (rbuf + 2), 2);
 	logcat("size = %d, ret = %d \n", size, ret);
-	if ((size < 0) || (ret < (size + sizeof(frame_head_t) + 2)))
+	if ((size < 0) || (ret < (size + sizeof(frame_head_t) + 2 + 1)))
 		return -1;
 
 	if ((rbuf[0] != 0xA5) && (rbuf[1] != 0x5A)) {
@@ -80,7 +80,7 @@ int Commu_GetPacket_Udp(int fd, byte *rbuf, int len, int timeout)
 
 	memcpy(&crc16, (rbuf + size + sizeof(frame_head_t)), 2);
 
-	if (crc16 != RTU_CRC(rbuf, (size + sizeof(frame_head_t)))) {
+	if (crc16 != RTU_CRC(rbuf + 2, (size + sizeof(frame_head_t) - 2))) {
 		logcat("Data packagre crc error!\n");
 		return -1;
 	}
@@ -129,7 +129,7 @@ int Commu_GetPacket(int fd, byte *rbuf, int len, int timeout)
 		return -1;
 	}
 
-	ret = socket_recv(fd, (rbuf + sizeof(frame_head_t)), (size + 2), timeout, 0);
+	ret = socket_recv(fd, (rbuf + sizeof(frame_head_t)), (size + 2 + 1), timeout, 0);
 	if (ret < 0)
 		return ret;
 	if (ret != (size + 2))
@@ -137,7 +137,7 @@ int Commu_GetPacket(int fd, byte *rbuf, int len, int timeout)
 
 	memcpy(&crc16, (rbuf + size + sizeof(frame_head_t)), 2);
 
-	if (crc16 != RTU_CRC(rbuf, (size + sizeof(frame_head_t)))) {
+	if (crc16 != RTU_CRC(rbuf + 2, (size + sizeof(frame_head_t) - 2))) {
 		logcat("Data packagre crc error!\n");
 		return -1;
 	}
@@ -168,9 +168,12 @@ int Commu_SendPacket(int fd, frame_head_t *head, byte *data)
 	size += sizeof(frame_head_t);
 	memcpy((sbuf + size), data, head->pack_len);
 	size += head->pack_len;
-	crc16 = RTU_CRC(sbuf, size);
+	crc16 = RTU_CRC(sbuf + 2, size - 2);
 	memcpy((sbuf + size), &crc16, 2);
 	size += 2;
+	sbuf[size] = 0x96; // add protocal tail 0x96
+	size += 1;
+
 #ifdef _DEBUG
 	logcat("Send MSG, len = %d:\n", size);
 	print_message(sbuf, size);
@@ -231,17 +234,11 @@ static int CMD_GetMsgTypeIndex(byte type)
 	case CMA_MSG_TYPE_DATA_XCHWS:
 		index = 11;
 		break;
-	case CMA_MSG_TYPE_STATUS_INFO:
+	case CMA_MSG_TYPE_STATUS_ERROR:
 		index = 12;
 		break;
-	case CMA_MSG_TYPE_STATUS_WORK:
-		index = 13;
-		break;
-	case CMA_MSG_TYPE_STATUS_ERROR:
-		index = 14;
-		break;
 	case CMA_MSG_TYPE_STATUS_HEART:
-		index = 15;
+		index = 13;
 		break;
 	default:
 		logcat("Invalid Sensor tyep.\n");
@@ -286,10 +283,6 @@ int CMA_Server_Process(int fd, byte *rbuf)
 
 	if (frame_type == CMA_FRAME_TYPE_CONTROL) {
 		switch (msg_type) {
-		case CMA_MSG_TYPE_CTL_TIME_CS:
-			if (CMA_Time_SetReq_Response(fd, rbuf) < 0)
-				ret = -1;
-			break;
 		case CMA_MSG_TYPE_CTL_CY_PAR:
 			if (CMA_SamplePar_SetReq_Response(fd, rbuf) < 0)
 				ret = -1;
@@ -302,20 +295,12 @@ int CMA_Server_Process(int fd, byte *rbuf)
 			if (CMA_ModelPar_SetReq_Response(fd, rbuf) < 0)
 				ret = -1;
 			break;
-		case CMA_MSG_TYPE_CTL_ALARM:
-			if (CMA_Alarm_SetReq_Response(fd, rbuf) < 0)
-				ret = -1;
-			break;
 		case CMA_MSG_TYPE_CTL_TOCMA_INFO:
 			if (CMA_UpDevice_SetReq_Response(fd, rbuf) < 0)
 				ret = -1;
 			break;
 		case CMA_MSG_TYPE_CTL_DEV_ID:
 			if (CMA_DeviceId_SetReq_Response(fd, rbuf) < 0)
-				ret = -1;
-			break;
-		case CMA_MSG_TYPE_CTL_BASIC_INFO:
-			if (CMA_BasicInfo_SetReq_Response(fd, rbuf) < 0)
 				ret = -1;
 			break;
 		case CMA_MSG_TYPE_CTL_DEV_RESET:
@@ -326,15 +311,6 @@ int CMA_Server_Process(int fd, byte *rbuf)
 			if (CMA_RequestData_Response(fd, rbuf) < 0)
 				ret = -1;
 			break;
-		case CMA_MSG_TYPE_CTL_UPGRADE_DATA:
-		case CMA_MSG_TYPE_CTL_UPGRADE_END:
-			if (CMA_SoftWare_Update_Response(fd, rbuf) < 0)
-				ret = -1;
-			break;
-		case CMA_MSG_TYPE_CTL_DEV_WAKE:
-			if (CMA_WakeupTime_Response(fd, rbuf) < 0)
-				ret = -1;
-			break;
 		default:
 			ret = -1;
 			logcat("CMA: Invalid MSG type.\n");
@@ -342,10 +318,6 @@ int CMA_Server_Process(int fd, byte *rbuf)
 	}
 	else if (frame_type == CMA_FRAME_TYPE_IMAGE_CTRL) {
 		switch (msg_type) {
-		case CMA_MSG_TYPE_IMAGE_VIDEO_SET:
-			if (CMA_Video_StopStart_Response(fd, rbuf) < 0)
-				ret = -1;
-			break;
 		case CMA_MSG_TYPE_IMAGE_CAP_MANUAL:
 			if (CMA_ManualCapture_Response(fd, rbuf) < 0)
 				ret = -1;
@@ -368,20 +340,12 @@ int CMA_Server_Process(int fd, byte *rbuf)
 			imageRcvLen = f_head->pack_len;
 			pthread_mutex_unlock(&imgMutex);
 			break;
-		case CMA_MSG_TYPE_IMAGE_GET_PAR:
-			if (CMA_GetImagePar_Response(fd, rbuf) < 0)
-				ret = -1;
-			break;
-		case CMA_MSG_TYPE_IMAGE_GET_TIME:
-			if (CMA_GetImageTimeTable_Response(fd, rbuf) < 0)
-				ret = -1;
-			break;
 		default:
 			ret = -1;
 			logcat("CMA: Invalid MSG type.\n");
 		}
 	}
-	else if (frame_type == CMA_FRAME_TYPE_IMAGE) {
+	else if (frame_type == CMA_FRAME_TYPE_IMAGE_DATA) {
 		pthread_mutex_lock(&imgMutex);
 		memcpy(imageRbuf, rbuf, MAX_COMBUF_SIZE);
 		imageRcvLen = f_head->pack_len;
@@ -390,6 +354,16 @@ int CMA_Server_Process(int fd, byte *rbuf)
 	else if ((frame_type == CMA_FRAME_TYPE_DATA_RES) || (frame_type == CMA_FRAME_TYPE_STATUS_RES)) {
 		status = *(rbuf + sizeof(frame_head_t));
 		logcat("CMD: Receive Send data response 0x%x.\n", status);
+
+		switch (msg_type) {
+		case CMA_MSG_TYPE_STATUS_HEART:
+			if (CMA_ManualCapture_Response(fd, rbuf) < 0)
+				ret = -1;
+			break;
+		default:
+			break;
+		}
+
 		resData[CMD_GetMsgTypeIndex(msg_type)].msg_type = msg_type;
 		resData[CMD_GetMsgTypeIndex(msg_type)].res = status;
 	}
@@ -407,6 +381,7 @@ int CMA_Send_SensorData(int fd, int type, void *data, int waitRes)
 	char *id = CMA_Env_Parameter.id;
 	frame_head_t f_head;
 	byte data_buf[MAX_DATA_BUFSIZE];
+	static byte index = 0;
 
 	logcat("CMA Send Sensor Data.\n");
 	memset(&f_head, 0, sizeof(frame_head_t));
@@ -415,15 +390,14 @@ int CMA_Send_SensorData(int fd, int type, void *data, int waitRes)
 	f_head.frame_type = CMA_FRAME_TYPE_DATA;
 	memcpy(f_head.id, id, 17);
 	memset(data_buf, 0, MAX_DATA_BUFSIZE);
+	f_head.index = index++;
 
 	switch (type) {
 	case CMA_MSG_TYPE_DATA_QXENV:
-	case CMA_MSG_TYPE_CTL_QX_PAR:
 		f_head.pack_len = sizeof(Data_qixiang_t);
 		f_head.msg_type = CMA_MSG_TYPE_DATA_QXENV;
 		break;
 	case CMA_MSG_TYPE_DATA_TGQXIE:
-	case CMA_MSG_TYPE_CTL_TGQX_PAR:
 		f_head.pack_len = sizeof(Data_incline_t);
 		f_head.msg_type = CMA_MSG_TYPE_DATA_TGQXIE;
 		break;
@@ -440,7 +414,6 @@ int CMA_Send_SensorData(int fd, int type, void *data, int waitRes)
 		f_head.pack_len = sizeof(Data_line_temperature_t);
 		break;
 	case CMA_MSG_TYPE_DATA_FUBING:
-	case CMA_MSG_TYPE_CTL_FUBING_PAR:
 		f_head.pack_len = sizeof(Data_ice_thickness_t);
 		f_head.msg_type = CMA_MSG_TYPE_DATA_FUBING;
 		break;
@@ -486,17 +459,14 @@ int CMA_Check_Send_SensorData(int fd, int type)
 
 	switch (type) {
 	case CMA_MSG_TYPE_DATA_QXENV:
-	case CMA_MSG_TYPE_CTL_QX_PAR:
 		filename = RECORD_FILE_QIXIANG;
 		record_len = sizeof(struct record_qixiang);
 		break;
 	case CMA_MSG_TYPE_DATA_TGQXIE:
-	case CMA_MSG_TYPE_CTL_TGQX_PAR:
 		filename = RECORD_FILE_TGQXIE;
 		record_len = sizeof(struct record_incline);
 		break;
 	case CMA_MSG_TYPE_DATA_FUBING:
-	case CMA_MSG_TYPE_CTL_FUBING_PAR:
 		filename = RECORD_FILE_FUBING;
 		record_len = sizeof(struct record_fubing);
 		break;
@@ -509,7 +479,6 @@ int CMA_Check_Send_SensorData(int fd, int type)
 	case CMA_MSG_TYPE_DATA_DXWD:
 //		break;
 	case CMA_MSG_TYPE_DATA_DXFP:
-	case CMA_MSG_TYPE_CTL_DXFP_PAR:
 //		break;
 	case CMA_MSG_TYPE_DATA_DXWDTZH:
 //		break;
@@ -620,11 +589,13 @@ int CMA_NetAdapter_SetReq_Response(int fd, byte *rbuf)
 {
 	frame_head_t *p_head = (frame_head_t *)rbuf;
 	byte  config_type = *(rbuf + sizeof(frame_head_t));
-	Ctl_net_adap_t  *adap = (Ctl_net_adap_t  *)(rbuf + sizeof(frame_head_t) + 1);
+	byte  request_flag = *(rbuf + sizeof(frame_head_t) + 1);
+	Ctl_net_adap_t  *adap = (Ctl_net_adap_t  *)(rbuf + sizeof(frame_head_t) + 2);
 	byte sbuf[MAX_DATA_BUFSIZE];
 	
 	memset(sbuf, 0, MAX_DATA_BUFSIZE);
 	sbuf[0] = 0xff;
+	sbuf[1] = request_flag;
 	
 	if (config_type == 0x00) {
 		Device_getNet_info(adap);
@@ -637,9 +608,9 @@ int CMA_NetAdapter_SetReq_Response(int fd, byte *rbuf)
 		
 	
 	p_head->frame_type = CMA_FRAME_TYPE_CONTROL_RES;
-	p_head->pack_len = sizeof(Ctl_net_adap_t) + 1;
+	p_head->pack_len = sizeof(Ctl_net_adap_t) + 2;
 	
-	memcpy((sbuf + 1), adap, sizeof(Ctl_net_adap_t));
+	memcpy((sbuf + 2), adap, sizeof(Ctl_net_adap_t));
 	
 	if (Commu_SendPacket(fd, p_head, sbuf) < 0)
 		return -1;
@@ -672,17 +643,14 @@ static int CMA_Send_RecordingData(int fd, byte type, time_t start, time_t end)
 
 	switch (type) {
 	case CMA_MSG_TYPE_DATA_QXENV:
-	case CMA_MSG_TYPE_CTL_QX_PAR:
 		filename = RECORD_FILE_QIXIANG;
 		record_len = sizeof(struct record_qixiang);
 		break;
 	case CMA_MSG_TYPE_DATA_TGQXIE:
-	case CMA_MSG_TYPE_CTL_TGQX_PAR:
 		filename = RECORD_FILE_TGQXIE;
 		record_len = sizeof(struct record_incline);
 		break;
 	case CMA_MSG_TYPE_DATA_FUBING:
-	case CMA_MSG_TYPE_CTL_FUBING_PAR:
 		filename = RECORD_FILE_FUBING;
 		record_len = sizeof(struct record_fubing);
 		break;
@@ -695,7 +663,6 @@ static int CMA_Send_RecordingData(int fd, byte type, time_t start, time_t end)
 	case CMA_MSG_TYPE_DATA_DXWD:
 //		break;
 	case CMA_MSG_TYPE_DATA_DXFP:
-	case CMA_MSG_TYPE_CTL_DXFP_PAR:
 //		break;
 	case CMA_MSG_TYPE_DATA_DXWDTZH:
 //		break;
@@ -804,19 +771,24 @@ int CMA_SamplePar_SetReq_Response(int fd, byte *rbuf)
 	sbuf[0] = 0xff;
 
 	if (set_type == 0x00) {
-		 /* Get Sample Parameter from Sensor */
+		/* Get HeartBeat cycle */
+		cycle = Device_getHeartBeat_Cycle();
+		if (cycle > 0)
+			sample_par->Heartbeat_Time = cycle;
+
+		/* Get Sample Parameter from Sensor */
 		switch (sample_par->Request_Type) {
-		case CMA_MSG_TYPE_CTL_QX_PAR:
+		case CMA_MSG_TYPE_DATA_QXENV:
 			cycle = Device_getSampling_Cycle("qixiang:samp_period");
 			if (cycle > 0)
 				sample_par->Main_Time = cycle;
 			break;
-		case CMA_MSG_TYPE_CTL_TGQX_PAR:
+		case CMA_MSG_TYPE_DATA_TGQXIE:
 			cycle = Device_getSampling_Cycle("tgqingxie:samp_period");
 			if (cycle > 0)
 				sample_par->Main_Time = cycle;
 			break;
-		case CMA_MSG_TYPE_CTL_FUBING_PAR:
+		case CMA_MSG_TYPE_DATA_FUBING:
 			cycle = Device_getSampling_Cycle("fubing:samp_period");
 			if (cycle > 0)
 				sample_par->Main_Time = cycle;
@@ -827,21 +799,26 @@ int CMA_SamplePar_SetReq_Response(int fd, byte *rbuf)
 		}
 	}
 	else if (set_type == 0x01) {
-		; /* Set Sample Parameter from Sensor */
+		/* Set HeatBeat cycle */
+		cycle = sample_par->Heartbeat_Time;
+		if (cycle > 0)
+			Device_setHeartBeat_Cycle(cycle);
+
+		/* Set Sample Parameter from Sensor */
 		switch (sample_par->Request_Type) {
-		case CMA_MSG_TYPE_CTL_QX_PAR:
+		case CMA_MSG_TYPE_DATA_QXENV:
 			cycle = sample_par->Main_Time;
 			if (cycle > 0)
 				Device_setSampling_Cycle("qixiang:samp_period", cycle);
 			sample_dev.interval = cycle * 60;
 			break;
-		case CMA_MSG_TYPE_CTL_TGQX_PAR:
+		case CMA_MSG_TYPE_DATA_TGQXIE:
 			cycle = sample_par->Main_Time;
 			if (cycle > 0)
 				Device_setSampling_Cycle("tgqingxie:samp_period", cycle);
 			sample_dev_1.interval = cycle * 60;
 			break;
-		case CMA_MSG_TYPE_CTL_FUBING_PAR:
+		case CMA_MSG_TYPE_DATA_FUBING:
 			cycle = sample_par->Main_Time;
 			if (cycle > 0)
 				Device_setSampling_Cycle("fubing:samp_period", cycle);
@@ -971,6 +948,7 @@ int CMA_UpDevice_SetReq_Response(int fd, byte *rbuf)
 	return 0;
 }
 
+#if 0
 int CMA_BasicInfo_SetReq_Response(int fd, byte *rbuf)
 {
 	frame_head_t *p_head = (frame_head_t *)rbuf;
@@ -1133,41 +1111,48 @@ int CMA_SoftWare_Update_Response(int fd, byte *rbuf)
 
 	return 0;
 }
+#endif
 
 int CMA_DeviceId_SetReq_Response(int fd, byte *rbuf)
 {
 	frame_head_t *p_head = (frame_head_t *)rbuf;
 	byte sbuf[MAX_DATA_BUFSIZE];
 	byte set_type = *(rbuf + sizeof(frame_head_t));
+	byte request_flag = *(rbuf + sizeof(frame_head_t) + 1);
 	byte CMD_ID[18];
 	byte Component_ID[18];
-	usint Original_ID = 0;
+	byte Original_ID[18];
 
 	memset(CMD_ID, 0, sizeof(CMD_ID));
 	memset(Component_ID, 0, sizeof(Component_ID));
-	memcpy(CMD_ID, p_head->id, 17);
-	memcpy(Component_ID, (rbuf + sizeof(frame_head_t) + 1), 17);
-	memcpy(&Original_ID, (rbuf + sizeof(frame_head_t) + 18), 2);
+	memset(Original_ID, 0, sizeof(Original_ID));
+
+	memcpy(CMD_ID, (rbuf + sizeof(frame_head_t) + 2 + 17 +17), 17);
+	memcpy(Component_ID, (rbuf + sizeof(frame_head_t) + 2), 17);
+	memcpy(Original_ID, (rbuf + sizeof(frame_head_t) + 2 + 17), 17);
 
 	memset(sbuf, 0, MAX_DATA_BUFSIZE);
-	sbuf[0] = 0xff;
+	sbuf[0] = set_type;
+
+	sbuf[1] = 0xff;
 
 	if (set_type == 0x00) {
-		Device_getId(Component_ID, &Original_ID); /* Get device ID */
-		memcpy(p_head->id, CMA_Env_Parameter.id, 17);
+		Device_getId(CMD_ID, Component_ID, Original_ID); /* Get device ID */
 	}
 	else if (set_type == 0x01) {
 		if (Device_setId(CMD_ID, Component_ID, Original_ID) < 0) /* Set device ID */
-			sbuf[0] = 0x00;
+			sbuf[1] = 0x00;
 	}
 	else
-		sbuf[0] = 0x00;
+		sbuf[1] = 0x00;
 
 	p_head->frame_type = CMA_FRAME_TYPE_CONTROL_RES;
-	p_head->pack_len = 20;
+	p_head->pack_len = 3 + 17 +17;
 
-	memcpy((sbuf + 1), Component_ID, 17);
-	memcpy((sbuf + 18), &Original_ID, 2);
+	sbuf[2] = request_flag;
+
+	memcpy((sbuf + 3), Component_ID, 17);
+	memcpy((sbuf + 3 + 17), Original_ID, 17);
 
 	if (Commu_SendPacket(fd, p_head, sbuf) < 0)
 		return -1;
@@ -1179,9 +1164,9 @@ int CMA_DeviceRset_Response(int fd, byte *rbuf)
 {
 	frame_head_t *p_head = (frame_head_t *)rbuf;
 	byte sbuf[MAX_DATA_BUFSIZE];
-	usint set_type = 0;
+	byte set_type = 0;
 
-	memcpy(&set_type, (rbuf + sizeof(frame_head_t)), 2);
+	memcpy(&set_type, (rbuf + sizeof(frame_head_t)), 1);
 	memset(sbuf, 0, MAX_DATA_BUFSIZE);
 	sbuf[0] = 0xff;
 
@@ -1228,13 +1213,34 @@ int CMA_WakeupTime_Response(int fd, byte *rbuf)
 
 int CMA_SetImagePar_Response(int fd, byte *rbuf)
 {
-//	frame_head_t *p_head = (frame_head_t *)rbuf;
-	Ctl_image_device_t  *image_par = (Ctl_image_device_t  *)(rbuf + sizeof(frame_head_t));
+	frame_head_t *p_head = (frame_head_t *)rbuf;
+	byte sbuf[MAX_DATA_BUFSIZE];
+	byte set_type = *(rbuf + sizeof(frame_head_t));
+	Ctl_image_device_t  *image_par = (Ctl_image_device_t  *)(rbuf + sizeof(frame_head_t) + 1);
 
-	/*
-	 *  Set Camera Parameters
-	 */
-	if (Camera_SetParameter(image_par) < 0)
+	memset(sbuf, 0, MAX_DATA_BUFSIZE);
+	sbuf[0] = 0xff;
+
+	if (set_type == 0x00) {
+		/*
+		 * Get Camera Parameters
+		 */
+		if (Camera_GetParameter(image_par) < 0) {
+			sbuf[0] = 0x00;
+		}
+	}
+	else {
+		/*
+		 *  Set Camera Parameters
+		 */
+		if (Camera_SetParameter(image_par) < 0)
+			sbuf[0] = 0x00;
+	}
+
+	p_head->pack_len = sizeof(Ctl_image_device_t) + 1;
+	memcpy((sbuf + 1), image_par, sizeof(Ctl_image_device_t));
+
+	if (Commu_SendPacket(fd, p_head, sbuf) < 0)
 		return -1;
 
 	return 0;
@@ -1265,15 +1271,36 @@ int CMA_GetImagePar_Response(int fd, byte *rbuf)
 
 int CMA_CaptureTimetable_Response(int fd, byte *rbuf)
 {
-//	frame_head_t *p_head = (frame_head_t *)rbuf;
-	byte channel = *(rbuf + sizeof(frame_head_t));
-	byte groups = *(rbuf + sizeof(frame_head_t) + 1);
+	frame_head_t *p_head = (frame_head_t *)rbuf;
+	byte sbuf[MAX_DATA_BUFSIZE];
+	byte set_type = *(rbuf + sizeof(frame_head_t));
+	byte channel = *(rbuf + sizeof(frame_head_t) + 1);
+	byte groups = *(rbuf + sizeof(frame_head_t) + 2);
 	Ctl_image_timetable_t  *image_tb = (Ctl_image_timetable_t  *)(rbuf + sizeof(frame_head_t) + 2);
+	int num = groups;
 
-	/*
-	 *  Set Camera Time Table
-	 */
-	if (Camera_SetTimetable(image_tb, groups, channel) < 0)
+	memset(sbuf, 0, MAX_DATA_BUFSIZE);
+	p_head->frame_type = CMA_FRAME_TYPE_IMAGE_CTRL;
+	sbuf[0] = set_type;
+	sbuf[1] = channel;
+	sbuf[2] = 0xff;
+
+	if (set_type == 0x00) {
+		if (Camera_GetTimeTable((sbuf + 2), &num) < 0)
+			sbuf[2] = 0x00;
+	}
+	else {
+		/*
+		 *  Set Camera Time Table
+		 */
+		if (Camera_SetTimetable(image_tb, groups, channel) < 0)
+			sbuf[2] = 0x00;
+	}
+
+	sbuf[3] = num;
+	p_head->pack_len = sizeof(Ctl_image_timetable_t) * num + 4;
+
+	if (Commu_SendPacket(fd, p_head, sbuf) < 0)
 		return -1;
 
 	return 0;
@@ -1305,20 +1332,26 @@ int CMA_GetImageTimeTable_Response(int fd, byte *rbuf)
 
 int CMA_ManualCapture_Response(int fd, byte *rbuf)
 {
-//	frame_head_t *p_head = (frame_head_t *)rbuf;
+	frame_head_t *p_head = (frame_head_t *)rbuf;
+	byte sbuf[MAX_DATA_BUFSIZE];
 	byte channel = *(rbuf + sizeof(frame_head_t));
 	byte presetting = *(rbuf + sizeof(frame_head_t) + 1);
 	char filename[256];
 
+	memset(sbuf, 0, MAX_DATA_BUFSIZE);
 	memset(filename, 0, 256);
+	sbuf[0] = 0x00;
 
 	/*
 	 *  Set Camera Parameters
 	 */
-	if (Camera_StartCapture(filename, channel, presetting) < 0)
-		return -1;
+	if (Camera_StartCapture(filename, channel, presetting) == 0)
+		if (CMA_Image_SendRequest(fd, filename, channel, presetting) == 0)
+			sbuf[0] = 0xff;
 
-	if (CMA_Image_SendRequest(fd, filename, channel, presetting) < 0)
+	p_head->pack_len = 1;
+
+	if (Commu_SendPacket(fd, p_head, sbuf) < 0)
 		return -1;
 
 	return 0;
@@ -1339,7 +1372,7 @@ int CMA_Image_SendRequest(int fd, char *imageName, byte channel, byte presetting
 
 	f_head.head = 0x5aa5;
 	f_head.pack_len = sizeof(Send_image_req_t);
-	f_head.frame_type = CMA_FRAME_TYPE_IMAGE;
+	f_head.frame_type = CMA_FRAME_TYPE_IMAGE_DATA;
 	f_head.msg_type = CMA_MSG_TYPE_IMAGE_SENDIMG_REQ;
 	memcpy(f_head.id, CMA_Env_Parameter.id, 17);
 
@@ -1421,7 +1454,7 @@ int CMA_Image_SendImageFile(int fd, char *ImageFile, byte channel, byte presetti
 	memset(&f_head, 0, sizeof(frame_head_t));
 
 	f_head.head = 0x5aa5;
-	f_head.frame_type = CMA_FRAME_TYPE_IMAGE;
+	f_head.frame_type = CMA_FRAME_TYPE_IMAGE_DATA;
 	f_head.msg_type = CMA_MSG_TYPE_IMAGE_DATA;
 	memcpy(f_head.id, CMA_Env_Parameter.id, 17);
 
@@ -1512,7 +1545,7 @@ int CMA_Image_SendImageLost(int fd, char *ImageFile, byte *rbuf)
 	memset(&f_head, 0, sizeof(frame_head_t));
 
 	f_head.head = 0x5aa5;
-	f_head.frame_type = CMA_FRAME_TYPE_IMAGE;
+	f_head.frame_type = CMA_FRAME_TYPE_IMAGE_DATA;
 	f_head.msg_type = CMA_MSG_TYPE_IMAGE_DATA;
 	memcpy(f_head.id, CMA_Env_Parameter.id, 17);
 
@@ -1563,7 +1596,7 @@ int CMA_Image_SendData_End(int fd, byte channel, byte presetting)
 	memset(&f_head, 0, sizeof(frame_head_t));
 
 	f_head.head = 0x5aa5;
-	f_head.frame_type = CMA_FRAME_TYPE_IMAGE;
+	f_head.frame_type = CMA_FRAME_TYPE_IMAGE_DATA;
 	f_head.msg_type = CMA_MSG_TYPE_IMAGE_DATA_END;
 	memcpy(f_head.id, CMA_Env_Parameter.id, 17);
 
@@ -1582,15 +1615,24 @@ int CMA_Image_SendData_End(int fd, byte channel, byte presetting)
 
 int CMA_CameraControl_Response(int fd, byte *rbuf)
 {
-//	frame_head_t *p_head = (frame_head_t *)rbuf;
+	frame_head_t *p_head = (frame_head_t *)rbuf;
+	byte sbuf[MAX_DATA_BUFSIZE];
 	byte channel = *(rbuf + sizeof(frame_head_t));
 	byte pre_setting = *(rbuf + sizeof(frame_head_t) + 1);
 	byte action = *(rbuf + sizeof(frame_head_t) + 2);
 
+	memset(sbuf, 0, MAX_DATA_BUFSIZE);
+	sbuf[0] = 0x00;
+
 	/*
 	 *  Set Camera Parameters
 	 */
-	if (Camera_Control(action, pre_setting, channel) < 0)
+	if (Camera_Control(action, pre_setting, channel) == 0)
+		sbuf[0] = 0xff;
+
+	p_head->pack_len = 1;
+
+	if (Commu_SendPacket(fd, p_head, sbuf) < 0)
 		return -1;
 
 	return 0;
@@ -1617,39 +1659,35 @@ int CMA_Video_StopStart_Response(int fd, byte *rbuf)
 
 int CMA_Send_HeartBeat(int fd, char *id)
 {
-	frame_head_t f_head;
-	int cur_time;
-	int ret = 0;
 
-	if (strlen(id) != 17) {
-		logcat("Invalid Device ID.\n");
-		return -1;
+	return CMA_Send_WorkStatus(fd, id);
+}
+
+int CMA_HeartBeat_Response(int fd, byte *rbuf)
+{
+//	frame_head_t *p_head = (frame_head_t *)rbuf;
+//	byte status = *(rbuf + sizeof(frame_head_t));
+//	byte mode = *(rbuf + sizeof(frame_head_t) + 1);
+	time_t  cur_time;
+	struct timeval tv;
+	struct timezone tz;
+
+	memcpy(&cur_time, (rbuf + sizeof(frame_head_t) + 2), sizeof(int));
+
+	if (cur_time != 0) {
+		gettimeofday (&tv , &tz);
+//		logcat("Now time: %d, %s \n", (int)tv.tv_sec, asctime(gmtime(&tv.tv_sec)));
+		tv.tv_sec = mktime(gmtime(&cur_time));
+//		logcat("Set time: %d, %s \n", (int)tv.tv_sec, asctime(gmtime(&cur_time)));
+		if (settimeofday(&tv, &tz) < 0)
+			logcat("CMA: Set time error.\n");
+		rtc_set_time(gmtime(&cur_time));
 	}
-
-	memset(&f_head, 0, sizeof(frame_head_t));
-	cur_time = time((time_t*)NULL);
-
-	f_head.head = 0x5aa5;
-	f_head.pack_len = 4;
-	f_head.frame_type = CMA_FRAME_TYPE_STATUS;
-	f_head.msg_type = CMA_MSG_TYPE_STATUS_HEART;
-	memcpy(f_head.id, id, 17);
-
-	resData[CMD_GetMsgTypeIndex(CMA_MSG_TYPE_STATUS_HEART)].res = -1;
-
-	if (Commu_SendPacket(fd, &f_head, (byte *)&cur_time) < 0)
-		return -1;
-
-	ret = CMD_WaitStatus_Res(CMA_MSG_TYPE_STATUS_HEART, 30);
-	if (ret == 0xff) {
-		logcat("CMD: Heatbeat Check OK.\n");
-	}
-	else
-		return -1;
 
 	return 0;
 }
 
+#if 0
 int CMA_Send_BasicInfo(int fd, char *id, int wait)
 {
 	frame_head_t f_head;
@@ -1688,6 +1726,7 @@ int CMA_Send_BasicInfo(int fd, char *id, int wait)
 
 	return 0;
 }
+#endif
 
 int CMA_Send_WorkStatus(int fd, char *id)
 {
@@ -1706,18 +1745,18 @@ int CMA_Send_WorkStatus(int fd, char *id)
 	f_head.head = 0x5aa5;
 	f_head.pack_len = sizeof(status_working_t);
 	f_head.frame_type = CMA_FRAME_TYPE_STATUS;
-	f_head.msg_type = CMA_MSG_TYPE_STATUS_WORK;
+	f_head.msg_type = CMA_MSG_TYPE_STATUS_HEART;
 	memcpy(f_head.id, id, 17);
 
 	if (Device_get_working_status(&status) < 0)
 		return -1;
 
-	resData[CMD_GetMsgTypeIndex(CMA_MSG_TYPE_STATUS_WORK)].res = -1;
+	resData[CMD_GetMsgTypeIndex(CMA_MSG_TYPE_STATUS_HEART)].res = -1;
 
 	if (Commu_SendPacket(fd, &f_head, (byte *)&status) < 0)
 		return -1;
 
-	ret = CMD_WaitStatus_Res(CMA_MSG_TYPE_STATUS_WORK, 10);
+	ret = CMD_WaitStatus_Res(CMA_MSG_TYPE_STATUS_HEART, 10);
 	if (ret == 0xff) {
 		logcat("CMD: Send work status OK.\n");
 	}

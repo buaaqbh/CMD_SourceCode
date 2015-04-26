@@ -91,7 +91,6 @@ int sample_avg(int *data, int size)
 void *sensor_qixiang_zigbee(void * arg)
 {
 	byte buf[16];
-	float f_threshold = 0.0;
 	Data_qixiang_t *pdata = (Data_qixiang_t *)arg;
 
 	logcat("Sensor: Get data from ZIGBEE device.\n");
@@ -101,16 +100,6 @@ void *sensor_qixiang_zigbee(void * arg)
 		pdata->Precipitation = (buf[4] << 8) | buf[5];
 		pdata->Precipitation_Intensity = (buf[6] << 8) | buf[7];
 		data_qixiang_flag++;
-
-		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 9, &f_threshold) == 0) {
-			if (pdata->Precipitation > f_threshold)
-				pdata->Alerm_Flag |= (1 << 8);
-		}
-
-		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 10, &f_threshold) == 0) {
-			if (pdata->Precipitation_Intensity > f_threshold)
-				pdata->Alerm_Flag |= (1 << 9);
-		}
 
 		sensor_status |= (1 << 3);
 	}
@@ -773,12 +762,6 @@ int Camera_Control(byte action, byte presetting, byte channel)
 //	pthread_mutex_lock(&rs485_mutex);
 
 	switch (action) {
-	case CAMERA_ACTION_POWERON:
-		Camera_PowerOn(CAMERA_DEVICE_ADDR);
-		break;
-	case CAMERA_ACTION_POWEROFF:
-		Camera_PowerOff(CAMERA_DEVICE_ADDR);
-		break;
 	case CAMERA_ACTION_CALLPRESET:
 		Camera_CallPreset(CAMERA_DEVICE_ADDR, presetting);
 		break;

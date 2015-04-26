@@ -400,8 +400,6 @@ void *sensor_qixiang_can_temp(void * arg)
 	int temp[6];
 	int humi[6];
 	int pres[6];
-	float f_threshold = 0.0;
-	int   i_threshold = 0;
 	Data_qixiang_t *pdata = (Data_qixiang_t *)arg;
 
 	logcat("Sensor: Get Temp Humi Pressure from CAN device.\n");
@@ -430,26 +428,6 @@ void *sensor_qixiang_can_temp(void * arg)
 			pdata->Humidity = (usint)sample_avg(humi, j);
 			pdata->Air_Pressure = (float)sample_avg(pres, j);
 			CMA_Env_Parameter.temp = pdata->Air_Temperature;
-
-			if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 6, &f_threshold) == 0) {
-//				logcat("temp = %f, f_threshold = %f \n", s_data.Air_Temperature, f_threshold);
-				if (pdata->Air_Temperature > f_threshold) {
-					pdata->Alerm_Flag |= (1 << 5);
-				}
-			}
-			else {
-				logcat("Sensor Get temp threshold error.\n");
-			}
-
-			if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 7, &i_threshold) == 0) {
-				if (pdata->Humidity > i_threshold)
-					pdata->Alerm_Flag |= (1 << 6);
-			}
-
-			if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 8, &f_threshold) == 0) {
-				if (pdata->Air_Pressure > f_threshold)
-					pdata->Alerm_Flag |= (1 << 7);
-			}
 		}
 
 		if (i < 5)
@@ -468,7 +446,6 @@ void *sensor_qixiang_can_radiation(void * arg)
 	int i, j;
 	byte buf[64];
 	int radia[6];
-	int   i_threshold = 0;
 	Data_qixiang_t *pdata = (Data_qixiang_t *)arg;
 
 	logcat("Sensor: Get radiation data from CAN device.\n");
@@ -488,16 +465,6 @@ void *sensor_qixiang_can_radiation(void * arg)
 
 		if ((i == 5) && (j > 0)) {
 			pdata->Radiation_Intensity = sample_avg(radia, j);
-
-			if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 11, &i_threshold) == 0) {
-//				logcat("temp = %f, f_threshold = %f \n", s_data.Air_Temperature, f_threshold);
-				if (pdata->Radiation_Intensity > i_threshold) {
-					pdata->Alerm_Flag |= (1 << 10);
-				}
-			}
-			else {
-				logcat("Sensor Get radiation threshold error.\n");
-			}
 		}
 
 		if (i < 5)
@@ -514,8 +481,6 @@ void *sensor_qixiang_can_radiation(void * arg)
 void *sensor_qixiang_can_wind(void * arg)
 {
 	int i = 0, j = 0;
-	float f_threshold = 0.0;
-	int   i_threshold = 0;
 	int sum;
 	byte buf[64];
 	int speed[3];
@@ -560,31 +525,6 @@ void *sensor_qixiang_can_wind(void * arg)
 		pdata->Max_WindSpeed = max / 10.0;
 		pdata->Extreme_WindSpeed = max / 10.0;
 		pdata->Standard_WindSpeed = speed[2] / 10.0;
-	}
-
-	if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 1, &f_threshold) == 0) {
-		if (pdata->Average_WindSpeed_10min > f_threshold)
-			pdata->Alerm_Flag |= (1 << 0);
-	}
-
-	if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 2, &i_threshold) == 0) {
-		if (pdata->Average_WindDirection_10min > i_threshold)
-			pdata->Alerm_Flag |= (1 << 1);
-	}
-
-	if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 3, &f_threshold) == 0) {
-		if (pdata->Max_WindSpeed > f_threshold)
-			pdata->Alerm_Flag |= (1 << 2);
-	}
-
-	if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 4, &f_threshold) == 0) {
-		if (pdata->Extreme_WindSpeed > f_threshold)
-			pdata->Alerm_Flag |= (1 << 3);
-	}
-
-	if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_QX_PAR, 5, &f_threshold) == 0) {
-		if (pdata->Standard_WindSpeed > f_threshold)
-			pdata->Alerm_Flag |= (1 << 4);
 	}
 
 	return 0;
@@ -661,7 +601,7 @@ int CAN_Sample_Qixiang(Data_qixiang_t *sp_data)
 		logcat("降雨量： %f \n", sp_data->Precipitation);
 		logcat("降水强度： %f \n", sp_data->Precipitation_Intensity);
 		logcat("光辐射： %d \n", sp_data->Radiation_Intensity);
-		logcat("Alarm： 0x%x \n", sp_data->Alerm_Flag);
+//		logcat("Alarm： 0x%x \n", sp_data->Alerm_Flag);
 	}
 
 	logcat("CMD: CAN sample Weather data finished.\n");
@@ -676,7 +616,6 @@ int CAN_Sample_TGQingXie(Data_incline_t *data)
 	int angle_x, angle_y;
 	struct record_incline record;
 	int record_len = 0;
-	float f_threshold = 0.0;
 
 	memset(&record, 0, sizeof(struct record_incline));
 	record.tm = rtc_get_time();
@@ -716,16 +655,6 @@ int CAN_Sample_TGQingXie(Data_incline_t *data)
 	logcat("顺线倾斜角： %f \n", data->Angle_X);
 	logcat("横向倾斜角： %f \n", data->Angle_Y);
 
-	if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_TGQX_PAR, 4, &f_threshold) == 0) {
-		if (data->Angle_X > f_threshold)
-			data->Alerm_Flag |= (1 << 3);
-	}
-
-	if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_TGQX_PAR, 5, &f_threshold) == 0) {
-		if (data->Angle_Y > f_threshold)
-			data->Alerm_Flag |= (1 << 4);
-	}
-
 	ret = 0;
 
 	sensor_status |= (1 << 5);
@@ -746,7 +675,6 @@ int CAN_Sample_FuBing(Data_ice_thickness_t *data)
 	int record_len = 0;
 	int s_num = sizeof(Sensor_CAN_List_PullForce) / sizeof(struct can_device);
 	int i;
-	float f_threshold = 0.0;
 
 	memset(&record, 0, sizeof(struct record_fubing));
 	record.tm = rtc_get_time();
@@ -787,28 +715,8 @@ Sample_finish:
 		data->Windage_Yaw_Angle = angle_x / 100;
 		data->Deflection_Angle = angle_y  / 100;
 		data->Tension_Difference = wav_cycle;
-		data->Reserve1 = wav_x;
-		data->Reserve2 = wav_y;
-
-		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_FUBING_PAR, 1, &f_threshold) == 0) {
-			if (data->Tension > f_threshold)
-				data->Alerm_Flag |= (1 << 0);
-		}
-
-		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_FUBING_PAR, 2, &f_threshold) == 0) {
-			if (data->Windage_Yaw_Angle > f_threshold)
-				data->Alerm_Flag |= (1 << 1);
-		}
-
-		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_FUBING_PAR, 3, &f_threshold) == 0) {
-			if (data->Deflection_Angle > f_threshold)
-				data->Alerm_Flag |= (1 << 2);
-		}
-
-		if (Sensor_Get_AlarmValue(CMA_MSG_TYPE_CTL_FUBING_PAR, 4, &f_threshold) == 0) {
-			if (data->Tension_Difference > f_threshold)
-				data->Alerm_Flag |= (1 << 3);
-		}
+//		data->Reserve1 = wav_x;
+//		data->Reserve2 = wav_y;
 
 		record_len = sizeof(struct record_incline);
 		memcpy(&record.data, data, sizeof(Data_ice_thickness_t));

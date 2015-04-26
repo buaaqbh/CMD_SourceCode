@@ -184,7 +184,8 @@ void *socket_heartbeat_func(void * arg)
 		if (CMD_status_regist == 0) {
 			logcat("CMD: Send Basic Info Message, regist = %d.\n", CMD_status_regist);
 			pthread_mutex_lock(&com_mutex);
-			ret = CMA_Send_BasicInfo(CMA_Env_Parameter.socket_fd, CMA_Env_Parameter.id, 0);
+//			ret = CMA_Send_BasicInfo(CMA_Env_Parameter.socket_fd, CMA_Env_Parameter.id, 0);
+			ret = 0;
 			pthread_mutex_unlock(&com_mutex);
 			if (ret == 0) {
 //				if (CMD_WaitStatus_Res(5) == 0xff)
@@ -193,7 +194,7 @@ void *socket_heartbeat_func(void * arg)
 		}
 
 		logcat("~~~~~~~~~ HeartBeat Sleep 60s --------\n");
-		CMD_Sleep(60);
+		CMD_Sleep(CMA_Env_Parameter.heart_cycle * 60);
 	}
 
 	return 0;

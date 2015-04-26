@@ -505,7 +505,7 @@ int SMS_CMDProcess(char *data, char *phone)
 			logcat("SMS: Invalid ID Value, strlen = %d.\n", strlen(p_data));
 			return -1;
 		}
-		if (Device_setId((byte *)p_data, (byte *)CMA_Env_Parameter.c_id, CMA_Env_Parameter.org_id) < 0)
+		if (Device_setId((byte *)p_data, (byte *)CMA_Env_Parameter.c_id, (byte *)CMA_Env_Parameter.org_id) < 0)
 			return -1;
 	}
 	else if (memcmp(p_cmd, COMMAND_ADDPHONE, strlen(COMMAND_ADDPHONE)) == 0) {
@@ -575,6 +575,12 @@ int SMS_ProcessMessage(int fd, char *msg)
 //	index = (index + 1) % 20;
 	SMS_DelMessage(fd, index);
 
+	return 0;
+}
+
+int SMS_ReadIMEI(int fd)
+{
+	// Strored in CMA_Env_Parameter.imei
 	return 0;
 }
 
