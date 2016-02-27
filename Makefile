@@ -10,7 +10,7 @@ SER_NAME = CMD
 M_DATE = Application
 
 
-CROSS_COMPILE = /opt/freescale/usr/local/gcc-4.6.2-glibc-2.13-linaro-multilib-2011.12/fsl-linaro-toolchain/bin/arm-linux-
+CROSS_COMPILE = /home/bqin/work/fsl/gcc-4.6.2-glibc-2.13-linaro-multilib-2011.12/fsl-linaro-toolchain/bin/arm-fsl-linux-gnueabi-
 CXX = $(CROSS_COMPILE)gcc
 #AR  = ar cr
 COMPILE_FLAGS = -Wall
@@ -21,9 +21,9 @@ else
 THIRDLIBS = x86-lib
 endif
   
-INCLUDE_PATH = -I/home/bqin/Dropbox/src/CMD_SourceCode/$(THIRDLIBS)/include
+INCLUDE_PATH = -I$(PWD)/$(THIRDLIBS)/include
 
-LIB_PATH = -L/home/bqin/Dropbox/src/CMD_SourceCode/$(THIRDLIBS)/lib
+LIB_PATH = -L$(PWD)/$(THIRDLIBS)/lib
 
 LIBS = -lpthread -liniparser -lsocketcan -ljpeg -lv4l2 -lv4lconvert -liconv
 
