@@ -352,7 +352,8 @@ typedef struct _alarm_value {
 #define RECORD_FILE_TGQXIE 		"/CMD_Data/record_tgqxie.dat"
 #define RECORD_FILE_FUBING 		"/CMD_Data/record_fubing.dat"
 
-#define  UART_PORT_RS485	"/dev/ttymxc3"
+#define  UART_PORT_RS485_SENSOR		"/dev/ttymxc4"
+#define  UART_PORT_RS485_CAMERA		"/dev/ttymxc3"
 #define  UART_RS485_SPEDD 	9600
 
 struct record_qixiang {

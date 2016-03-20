@@ -10,7 +10,7 @@ SER_NAME = CMD
 M_DATE = Application
 
 
-CROSS_COMPILE = /home/bqin/work/fsl/gcc-4.6.2-glibc-2.13-linaro-multilib-2011.12/fsl-linaro-toolchain/bin/arm-fsl-linux-gnueabi-
+CROSS_COMPILE = arm-fsl-linux-gnueabi-
 CXX = $(CROSS_COMPILE)gcc
 #AR  = ar cr
 COMPILE_FLAGS = -Wall

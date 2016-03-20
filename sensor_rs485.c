@@ -67,21 +67,21 @@ int Sensor_RS485_ReadData(byte addr, byte *buf)
 
 Read_retry:
 	usleep(200 * 1000);
-	system("echo 1 >/sys/devices/platform/gpio-power.0/rs485_direction");
+	system("echo 0x81 >/sys/devices/platform/gpio-power.0/rs485_direction");
 	usleep(200 * 1000);
 
-	fd = uart_open_dev(UART_PORT_RS485);
+	fd = uart_open_dev(UART_PORT_RS485_SENSOR);
 	if (fd == -1) {
 		logcat("RS485 Open port: %s\n", strerror(errno));
 		pthread_mutex_unlock(&rs485_mutex);
 		return -1;
 	}
 	else
-		logcat("RS485 Open port: %s, fd = %d\n", UART_PORT_RS485, fd);
+		logcat("RS485 Open port: %s, fd = %d\n", UART_PORT_RS485_SENSOR, fd);
 
 	uart_set_speed(fd, UART_RS485_SPEDD);
 	if(uart_set_parity(fd, 8, 1, 'N') == -1) {
-		logcat ("RS485 %s: Set Parity Error", UART_PORT_RS485);
+		logcat ("RS485 %s: Set Parity Error", UART_PORT_RS485_SENSOR);
 		goto err;
 	}
 
@@ -106,7 +106,7 @@ Read_retry:
 	debug_out(cmd, 13);
 #endif
 
-	system("echo 0 >/sys/devices/platform/gpio-power.0/rs485_direction");
+	system("echo 0x80 >/sys/devices/platform/gpio-power.0/rs485_direction");
 //	usleep(10 * 1000);
 	memset(buf, 0, 16);
 	ret = io_readn(fd, buf, 13, timeout);

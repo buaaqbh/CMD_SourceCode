@@ -63,7 +63,7 @@ int Camera_SendCmd(byte *cmd, int len)
 	pthread_mutex_lock(&rs485_mutex);
 	av_rs485_used = 1;
 
-	fd = uart_open_dev(UART_PORT_RS485);
+	fd = uart_open_dev(UART_PORT_RS485_CAMERA);
 	if (fd == -1) {
 		logcat("serial port open error: %s\n", strerror(errno));
 		pthread_mutex_unlock(&rs485_mutex);
@@ -76,7 +76,7 @@ int Camera_SendCmd(byte *cmd, int len)
 		return -1;
 	}
 
-	system("echo 1 >/sys/devices/platform/gpio-power.0/rs485_direction");
+	system("echo 0x01 >/sys/devices/platform/gpio-power.0/rs485_direction");
 	usleep(10 * 1000);
 	cmd[len - 1] = checksum((cmd + 1), 5);
 	err = io_writen(fd, cmd, len);

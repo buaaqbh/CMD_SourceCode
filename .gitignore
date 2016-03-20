@@ -24,5 +24,7 @@
 .cproject
 .project
 .settings/
+.DS_Store
+.idea/
 
 CMD_Application
